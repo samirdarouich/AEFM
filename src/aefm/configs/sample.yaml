@@ -1,0 +1,69 @@
+# @package _global_
+
+defaults:
+  - _self_
+
+# Define model and path of samples
+globals:
+  model: ???
+  samples_path: ???
+  flow_property: _positions
+  target_output_key: target_pred
+  reference_path: null
+  
+aefmsampler:
+  _target_: aefm.sampler.AEFMSampler
+  sampler:
+    _target_: aefm.sampling.FixedpointSampler
+    property: ${globals.flow_property}
+    property_pred_key: ${globals.target_output_key}
+    prediction_net: ${globals.model}
+    invariant: True
+    results_on_cpu: True
+    device: null
+    fixpoint_algorithm: anderson
+    fixpoint_settings:
+      threshold: 100  # max number of iterations
+      eps: 1e-2       # convergence threshold
+      beta: 1.0       # relaxation parameter
+      m: 5            # number of previous iterations to use
+      stop_mode: abs  # stop when the absolute error is below eps
+  store_path: aefm_samples
+  reference_path: ${globals.reference_path}
+
+
+# hydra configuration
+hydra:
+    job:
+      chdir: True
+
+    # output paths for hydra logs
+    run:
+        dir: ${run.path}/${run.id}
+
+    searchpath:
+      - file://${oc.env:PWD}
+      - file://${oc.env:PWD}/configs
+
+    # disable hydra config storage, since handled manually
+    output_subdir: null
+
+    help:
+      app_name: AEFM Sample
+
+      template: |-
+        AEFM
+
+        == Configuration groups ==
+        Compose your configuration from those groups (db=mysql)
+
+        $APP_CONFIG_GROUPS
+
+        == Config ==
+        aefm_sample model=/your/custom/model/path samples_path=/your/custom/samples/path
+
+        -------
+        $CONFIG
+        -------
+
+        ${hydra.help.footer}

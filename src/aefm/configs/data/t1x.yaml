@@ -1,0 +1,28 @@
+defaults:
+  - custom
+
+_target_: aefm.datasets.Transition1x
+
+datapath: ${run.data_dir}/t1x.db  # data_dir is specified in train.yaml
+
+# Define how to handle reaction input
+group_by_reaction: True
+include_final_intermediates: False
+include_all_intermediates: False
+
+batch_size: 32
+num_train: 8000
+num_val: 1000
+num_test: 1073
+num_workers: 8
+
+transforms:
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: aefm.transform.SubtractCenterOfGeometry
+    - _target_: aefm.transform.AllToAllNeighborList
+    - _target_: schnetpack.transform.CastTo32
+
+# convert to typically used units
+distance_unit: Ang
+property_units: {}
+load_properties: []

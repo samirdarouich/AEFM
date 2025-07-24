@@ -1,0 +1,13 @@
+# @package _global_
+
+defaults:
+  - aefm
+
+run:
+  id: reactot
+
+globals:
+  sigma: 0.11
+
+trainer:
+  max_epochs: 600

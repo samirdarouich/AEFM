@@ -1,0 +1,16 @@
+sampling:
+    _target_: aefm.callbacks.SamplerCallback
+    sampler: ${sampler}
+    name: sampling
+    store_path: samples
+    every_n_batchs_train: 1
+    every_n_epochs_train: 100000 # large number means only at test time
+    start_epoch_train: 1
+    every_n_batchs_val: 1
+    every_n_epochs_val: 100000 # large number means only at test time
+    start_epoch_val: 1
+    log_rmsd: True
+    same_order: True # If samples and targets are in the same order
+    ignore_chirality: False # Reflect sampled molecule in z direction and check if it fits better
+    log_trajectory: False
+    t_trajectory: null # define list of timesteps to log trajectory

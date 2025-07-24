@@ -1,0 +1,8 @@
+defaults:
+  - optimizer: adam
+  - scheduler: reduce_on_plateau
+
+_target_: aefm.task.GenerativeTask
+outputs: ???
+warmup_steps: 0
+skip_exploding_batches: True

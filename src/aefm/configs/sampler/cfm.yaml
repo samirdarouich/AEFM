@@ -1,0 +1,13 @@
+_target_: aefm.sampling.FlowSampler
+flow_property: ${globals.flow_property}
+velocity_net: ???
+time_key: ${globals.time_target_key}
+velocity_pred_key: ${globals.velocity_output_key}
+ode_int_kwargs:
+  method: dopri5
+  atol: 1e-5
+  rtol: 1e-5
+use_vd_ode: false
+invariant: True
+results_on_cpu: True
+device: null

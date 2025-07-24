@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aefm"
+# Declaring that the version will be read dynamically.
+# This helps us not having to specify the version twice.
+# We have to specify the version only in schnetpack.__version__
+# see [tool.setuptools.dynamic] below
+dynamic = ["version"]
+authors = [
+    { name = "Samir Darouich" },
+]
+
+description = "AEFM - Adaptive Equilibrium Flow Matching"
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "schnetpack>2.0.0",
+    "torch_geometric>2.6",
+    "torch_scatter @ https://data.pyg.org/whl/torch-2.4.0%2Bcu121/torch_scatter-2.1.2%2Bpt24cu121-cp311-cp311-linux_x86_64.whl",
+    "torchdiffeq>0.2",
+    "py3Dmol>2.0.0",
+    "wandb>=0.12.9",
+    "tblite[ase]",
+    "pymatgen",
+    "pot>0.9",
+    "pyscf",
+    "geometric",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+script-files = [
+    "src/scripts/aefm_train",
+    "src/scripts/aefm_sample",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "aefm.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+aefm = ["configs/**/*.yaml"]

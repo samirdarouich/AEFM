@@ -1,0 +1,199 @@
+# @package _global_
+
+defaults:
+  - override /model: nnp
+  - override /data: t1x
+  - override /task: generative_task
+  - override /sampler: fixedpoint
+  - override /callbacks:
+      - checkpoint
+      - lrmonitor
+      - ema
+      # - sampling # anderson acc. does not work for batches yet
+      # - earlystopping
+
+matmul_precision: medium
+seed: 42
+
+# If provided, a pretrained model will be used
+# pretrained: ...
+
+run:
+  experiment: aefm
+  data_dir: ???
+  id: basic
+
+globals:
+  # Model global settings
+  cutoff: 10.
+  lr: 1.0e-4
+  n_atom_basis: 196
+  num_radial: 96
+  num_layers: 6
+
+  # Keys for the transforms
+  target_key: target
+  target_output_key: target_pred
+  flow_property: _positions
+  time_target_key: t  # this is not used in the net but needs to be provided
+
+  # Key of target transition state positions. Used to compute the 
+  # target distances for physical loss
+  target_positions_key: target__positions
+
+  # Fixedpoint settings
+  fixpoint_algorithm: anderson
+  
+  # Flow process to define x_t
+  flow_process:
+    _target_: aefm.processes.CondOTCFM
+    sigma: 0.05
+    invariant: True 
+    dtype: float64
+
+  # Definiton of the sigma for the adaptive prior
+  sigma: null
+
+  # Noise for the target. If chosen small (1e-4), can help with stability
+  sigma_x_1: 0.0
+
+# Define training settings
+trainer:
+  precision: 32
+  gradient_clip_val: 0.5
+  # Define early stopping as callback or the maximum number of epochs
+  max_epochs: ??? 
+
+# Fixedpoint settings
+sampler:
+  prediction_net: null
+  fixpoint_algorithm: ${globals.fixpoint_algorithm}
+  fixpoint_settings:
+    threshold: 10 # max number of iterations
+    eps: 1e-2 # convergence threshold
+    beta: 1.0 # relaxation parameter
+    m: 5 # number of previous iterations to use
+    stop_mode: abs # stop when the absolute error is below eps
+
+data:
+  batch_size: 64
+  # oa_reactdiff_split doesnt contain validation data (it is included in the training data)
+  # if hyperparameters should be tuned, use oa_reactdiff_split_own, which exlucdes 1000 
+  # training samples for validation
+  split_file: ${run.data_dir}/splits/oa_reactdiff_split.npz 
+
+  # The 1000 validation samples are used during training to monitor, eventhough
+  # they are included in the training data.
+  num_train: 9000
+  num_val: 1000
+  num_test: 1073
+
+  num_workers: 8
+  pin_memory: True
+  persistent_workers: True
+  
+  # Define how to handle reaction input. Group by reaction groups reactant,
+  # neb_intermediates, TS, and product. Such that the reaction transform
+  # can be applied. If MLIP should be trained, there is no need to group it.
+  group_by_reaction: True
+  include_final_intermediates: False
+
+  # Define how to handle the reaction input
+  reaction_transforms:
+    - _target_: aefm.transform.reaction.AdaptivePrior
+      target_property: ${globals.flow_property}
+      # Define adaptive prior sigma
+      sigma: ${globals.sigma}
+      # If large sigma is used, it can help to align the input
+      align: False 
+      # Stability parameter for target
+      sigma_x_1: ${globals.sigma_x_1}
+  
+
+  transforms:
+    - _target_: aefm.transform.ConditionalFlow
+      flow_property: ${globals.flow_property}
+      flow_process: ${globals.flow_process}
+      output_key: ${globals.target_key}
+      time_key: ${globals.time_target_key}
+
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: aefm.transform.SubtractCenterOfGeometry
+    - _target_: aefm.transform.AllToAllNeighborList
+      object_aware: False #--> set this to True if reactant and product context should be used
+    - _target_: aefm.transform.ComputeDistances
+      name: ${globals.target_positions_key}
+    - _target_: schnetpack.transform.CastTo32
+
+# This defines the backbone model.
+model:
+  # Input modules could be computation of distances
+  # LEFTNet does this itself.
+  input_modules: []
+  representation:
+    _target_: aefm.representation.leftnet.LEFTNet
+    cutoff: ${globals.cutoff}
+    num_layers: ${globals.num_layers}
+    num_radial: ${globals.num_radial}
+    hidden_channels: ${globals.n_atom_basis}
+
+  # This is the output modules. It takes the hidden scalar and vectorial
+  # representations and predict the final positions.
+  output_modules:
+    - _target_: aefm.model.heads.TimeAwareEquivariant
+      n_in: ${globals.n_atom_basis}
+      n_hidden: null
+      n_layers: 1
+      output_key: ${globals.target_output_key}
+      # AEFM is trained without time context
+      include_time: False
+
+  do_postprocessing: True
+  postprocessors:
+    - _target_: aefm.transform.BatchSubtractCenterOfGeometry
+      name: ${globals.target_output_key}
+    # Computes the distances of the predicted positions. Needed for phyiscal loss
+    - _target_: aefm.transform.ComputeDistances
+      name: ${globals.target_output_key}
+
+# This defines the training task.
+task:
+  skip_exploding_batches: True
+  outputs:
+    # Computes the MSE loss between the predicted and target positions
+    - _target_: schnetpack.task.ModelOutput
+      name: ${globals.target_output_key}
+      target_property: ${globals.target_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mse:
+          _target_: torchmetrics.regression.MeanSquaredError
+      loss_weight: 1.0
+    
+    # Computes the physical bond loss to avoid artefacts in generative models
+    - _target_: aefm.task.BondModelOutput
+      name: ${globals.target_output_key}
+      target_property: ${globals.target_positions_key}
+      cutoff: 2.0
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mse_bond:
+          _target_: torchmetrics.regression.MeanSquaredError
+      loss_weight: 1.0
+  
+  # Regularization
+  optimizer_args:
+    weight_decay: 0.0
+
+  # Change scheduler if wanted (currently no scheduler is used)
+  scheduler_args:
+    patience: ${trainer.max_epochs}
+
+callbacks:
+  # if early stopping is needed
+  #early_stopping:
+  #  patience: 400
+  ema:
+    decay: 0.999

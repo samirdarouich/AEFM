@@ -1,0 +1,66 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - run: default_run
+  - globals: default_globals
+  - trainer: default_trainer
+  - callbacks:
+    - checkpoint
+    - lrmonitor
+    - earlystopping
+    - ema
+    - sampling
+  - sampler: null
+  - task: default_task
+  - model: null
+  - data: custom
+  - logger: wandb
+  - experiment: null
+
+# hydra configuration
+hydra:
+    job:
+      chdir: True
+    # output paths for hydra logs
+    run:
+        dir: ${run.path}/${run.id}
+
+    searchpath:
+      - file://${oc.env:PWD}
+      - file://${oc.env:PWD}/configs
+
+    # disable hydra config storage, since handled manually
+    output_subdir: null
+
+    help:
+      app_name: AEFM Train
+
+      template: |-
+        AEFM
+
+        == Configuration groups ==
+        Compose your configuration from those groups (db=mysql)
+
+        $APP_CONFIG_GROUPS
+
+        == Config ==
+        This is the config generated for this run.
+
+        -------
+        $CONFIG
+        -------
+
+        You can overide the config file with a pre-defined experiment config
+        > aefm_train experiment=xtb_ci_neb
+
+        or your own experiment config, which needs to be located in a directory called `experiment` in the config search
+        path, e.g.,
+        > aefm_train --config-dir=./my_configs experiment=my_experiment
+
+        with your experiment config located at `./my_configs/experiment/my_experiment.yaml`.
+
+        You can also override everything with the command line, for example:
+        > aefm_train experiment=xtb_ci_neb data_dir=</path/to/datadir> data.batch_size=50
+
+        ${hydra.help.footer}

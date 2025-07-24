@@ -1,0 +1,39 @@
+_target_: pytorch_lightning.Trainer
+
+devices: 1
+
+min_epochs: null
+max_epochs: 1000
+
+# prints
+enable_model_summary: True
+profiler: null
+
+# Gradient handling
+gradient_clip_val: 0
+accumulate_grad_batches: 1 # Accumulate gradients over this many batches
+
+# Validation
+val_check_interval: 1.0
+check_val_every_n_epoch: 1
+
+# Sanity checks and debugging options
+num_sanity_val_steps: 0
+fast_dev_run: False
+overfit_batches: 0
+
+# Use a xx fraction of the train / val / test set
+limit_train_batches: 1.0
+limit_val_batches: 1.0
+limit_test_batches: 1.0
+
+# Check for anomaly detection (catching NaNs, inf gradients)
+detect_anomaly: False
+
+precision: 32
+accelerator: auto
+num_nodes: 1
+deterministic: False
+
+# Model is in training mode
+inference_mode: False

@@ -1,0 +1,10 @@
+_target_: aefm.sampling.DDPMSampler
+diffuse_property: ${globals.diffuse_property}
+denoiser_net: ???
+diffusion_process: ${globals.diffusion_process}
+time_key: ${globals.time_target_key}
+noise_pred_key: ${globals.noise_output_key}
+
+invariant: True
+results_on_cpu: True
+device: null

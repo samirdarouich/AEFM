@@ -1,0 +1,17 @@
+_target_: aefm.sampling.FixedpointSampler
+property: ${globals.flow_property}
+property_pred_key: ${globals.target_output_key}
+prediction_net: ???
+
+fixpoint_algorithm: anderson
+fixpoint_settings:
+  threshold: 100  # max number of iterations
+  eps: 1e-2       # convergence threshold
+  beta: 1.0       # relaxation parameter
+  m: 5            # number of previous iterations to use
+  stop_mode: abs  # stop when the absolute error is below eps
+
+
+invariant: True
+results_on_cpu: True
+device: null

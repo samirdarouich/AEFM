@@ -1,0 +1,13 @@
+# @package _global_
+
+defaults:
+  - aefm
+
+run:
+  id: xtb_ci_neb
+
+globals:
+  sigma: 0.19
+
+trainer:
+  max_epochs: 600
