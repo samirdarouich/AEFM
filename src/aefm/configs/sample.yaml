@@ -3,6 +3,11 @@
 defaults:
   - _self_
 
+run:
+  work_dir: ${hydra:runtime.cwd}
+  path: ${run.work_dir}/samples
+  id: ${uuid:1}
+
 # Define model and path of samples
 globals:
   model: ???

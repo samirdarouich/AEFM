@@ -97,7 +97,7 @@ class BondModelOutput(ModelOutput):
 
         # Mask out distances above cutoff
         if self.cutoff is not None and self.cutoff > 0:
-            mask = target_distances > self.cutoff
+            mask = target_distances < self.cutoff
             if self.include_pred:
                 mask = mask | (pred_distances < self.cutoff)
             target_distances = target_distances[mask]
@@ -157,7 +157,7 @@ class GenerativeTask(AtomisticTask):
 
         return pred
 
-    def log_metrics(self, pred, targets, subset):
+    def log_metrics(self, pred, targets, subset, batch_size):
         for output in self.outputs:
             output.update_metrics(pred, targets, subset)
             for metric_name, metric in output.metrics[subset].items():
@@ -167,8 +167,9 @@ class GenerativeTask(AtomisticTask):
                     on_step=(subset == "train"),
                     on_epoch=(subset != "train"),
                     prog_bar=False,
+                    batch_size=batch_size,
                 )
-
+    
     def _step(self, batch: Dict[str, torch.Tensor], subset: str) -> torch.FloatTensor:
         """
         perform one forward pass and calculate the loss and log metrics.
@@ -219,15 +220,27 @@ class GenerativeTask(AtomisticTask):
         loss = self.loss_fn(pred, targets)
 
         # log loss and metrics
+        batch_size = batch[properties.idx_m].max().item() + 1
         self.log(
             f"{subset}/loss",
             loss,
             on_step=(subset == "train"),
             on_epoch=(subset != "train"),
             prog_bar=(subset != "train"),
-            batch_size=batch[properties.idx_m].max().item() + 1,
+            batch_size=batch_size,
         )
-        self.log_metrics(pred, targets, subset)
+        self.log_metrics(pred, targets, subset, batch_size)
+        
+        for key in batch:
+            if properties.rmsd in key:
+                self.log(
+                    f"{subset}/{key}",
+                    batch[key].mean(),
+                    on_step=(subset == "train"),
+                    on_epoch=(subset != "train"),
+                    prog_bar=False,
+                    batch_size=batch_size,
+                )
 
         return loss  # type: ignore
 

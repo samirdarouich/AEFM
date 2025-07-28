@@ -9,7 +9,6 @@ defaults:
       - checkpoint
       - lrmonitor
       - ema
-      # - sampling # anderson acc. does not work for batches yet
       # - earlystopping
 
 matmul_precision: medium
@@ -40,9 +39,6 @@ globals:
   # Key of target transition state positions. Used to compute the 
   # target distances for physical loss
   target_positions_key: target__positions
-
-  # Fixedpoint settings
-  fixpoint_algorithm: anderson
   
   # Flow process to define x_t
   flow_process:
@@ -63,17 +59,6 @@ trainer:
   gradient_clip_val: 0.5
   # Define early stopping as callback or the maximum number of epochs
   max_epochs: ??? 
-
-# Fixedpoint settings
-sampler:
-  prediction_net: null
-  fixpoint_algorithm: ${globals.fixpoint_algorithm}
-  fixpoint_settings:
-    threshold: 10 # max number of iterations
-    eps: 1e-2 # convergence threshold
-    beta: 1.0 # relaxation parameter
-    m: 5 # number of previous iterations to use
-    stop_mode: abs # stop when the absolute error is below eps
 
 data:
   batch_size: 64

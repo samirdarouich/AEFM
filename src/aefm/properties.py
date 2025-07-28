@@ -23,6 +23,7 @@ conditions_mask: Final[str] = f"{conditions}_mask"
 conditions_idx_m: Final[str] = f"{conditions}_idx_m"
 conditions_n_atoms: Final[str] = f"{conditions}_n_atoms"
 subgraph_mask: Final[str] = "_subgraph_mask"
+rmsd: Final[str] = "_rmsd"
 
 reactant_coords: Final[str] = "_reactant_coords"
 product_coords: Final[str] = "_product_coords"

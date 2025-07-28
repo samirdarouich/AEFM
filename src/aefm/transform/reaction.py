@@ -369,7 +369,9 @@ class AdaptivePrior(GenerativeStrategy):
         output[properties.image_type] = torch.tensor(
             [properties.IMAGE_TYPES["intermediate_noise"]]
         )
-
+        
+        rmsd = ((x_1-x_0)**2).sum(-1).mean().sqrt()
+        output[properties.rmsd+"_initial"] = rmsd.unsqueeze(0)
         outputs = [output]
 
         return outputs

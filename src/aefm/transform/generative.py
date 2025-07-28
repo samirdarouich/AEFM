@@ -7,7 +7,7 @@ import schnetpack.transform as trn
 import torch
 import torch.nn as nn
 from schnetpack.utils import load_model
-
+from torch_scatter import scatter_mean
 from aefm import properties
 from aefm.processes import DiffusionProcess, FlowProcess
 from aefm.processes.functional import (
@@ -129,6 +129,8 @@ class ConditionalFlow(trn.Transform):
 
         # update the returned inputs.
         inputs.update(outputs)
+        rmsd = scatter_mean(((x_1-outputs[self.flow_property])**2).sum(-1), idx_m, dim=0).sqrt()
+        inputs[properties.rmsd+"_intermediate"] = rmsd
 
         return inputs
 

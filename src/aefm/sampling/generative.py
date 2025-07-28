@@ -44,41 +44,6 @@ class FixedpointSampler(Sampler):
         log.warning("Batched evaluation is not yet implemented!")
 
     @torch.no_grad()
-    def inference_step(
-        self,
-        inputs: Dict[str, torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        One inference step for the model to get the velocity prediction.
-
-        Args:
-            inputs: input data for velocity prediction.
-            t: the current time of the flow process.
-            conditions_in_target: Wheter conditions are also flowed during inference.
-            conditions_zero_velocity: Whether conditions have zero velocity.
-
-        Returns:
-            velocity prediction and its uncertainty (if available)
-        """
-        # cast input to float for the velocity net
-        for key, val in inputs.items():
-            if val.dtype == torch.float64:
-                inputs[key] = val.float()
-
-        # forward pass through the velocity net
-        model_out = self.prediction_net(inputs)  # type: ignore
-
-        # fetch the velocity prediction
-        target_pred = model_out[self.property_pred_key].detach()
-
-        # fetch the uncertainty if available
-        target_pred_uncertainty = model_out.get(
-            self.property_pred_key + "_uncertainty", torch.zeros_like(target_pred)
-        )
-
-        return target_pred, target_pred_uncertainty
-
-    @torch.no_grad()
     def sample(
         self,
         inputs: Dict[str, torch.Tensor],
@@ -106,7 +71,7 @@ class FixedpointSampler(Sampler):
                 "while the specified diffusion process is invariant."
             )
 
-        nfe, trajectory, uncertainty_history = self.iterative_update(
+        nfe, trajectory = self.iterative_update(
             inputs, **self.fixpoint_settings, **kwargs
         )
 
@@ -118,9 +83,8 @@ class FixedpointSampler(Sampler):
             batch = {prop: val.cpu() for prop, val in batch.items()}
 
         trajectory_list = []
-        for traj, uncertainty in zip(trajectory, uncertainty_history):
+        for traj in trajectory:
             batch[self.property] = traj  # type: ignore
-            batch[self.property + "_uncertainty"] = uncertainty
             trajectory_list.append(batch.copy())
 
         return nfe, trajectory_list
@@ -145,28 +109,26 @@ class FixedpointSampler(Sampler):
         else:
             x_0 = inputs[properties.R].clone().detach()
 
-        trajectory = []
-        uncertainty_history = []
-
         # Fixpoint algorithm currently has a batch dimension, which does not work for
         # molecules. So no batching is yet implemented.
+        @torch.no_grad()
         def f(x):
-            """
-            Function to predict the next state.
-            """
             # x has shape (1, n_atoms, 3)
             inputs[self.property] = x.squeeze(0)
-            pred, uncertainty = self.inference_step(inputs)
             # return shape (1, n_atoms, 3)
-            return pred.unsqueeze(0)
+            return self.prediction_net(inputs)[self.property_pred_key].unsqueeze(0)
+        
+        # Adapt the convergence based on the number of atoms (relation norm to RMSD)
+        if ("stop_mode" in kwargs) and (kwargs["stop_mode"] == "abs"):
+            eps = kwargs["eps"]
+            kwargs["eps"] = eps * torch.sqrt(inputs[properties.n_atoms][0])
         
         out = FIXPOINT_SOLVERS[self.fixpoint_algorithm](f, x_0.unsqueeze(0), **kwargs)
         
         # Remove batch dimension of prediction
         trajectory = [traj.squeeze(0) for traj in out["history"]]
-        uncertainty_history = [torch.zeros_like(traj.squeeze(0)) for traj in out["history"]]
 
-        return out["nstep"], torch.stack(trajectory), torch.stack(uncertainty_history)
+        return out["nstep"], torch.stack(trajectory)
     
 class FlowSampler(Sampler):
     """

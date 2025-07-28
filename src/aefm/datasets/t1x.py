@@ -1,5 +1,5 @@
 from typing import List, Optional, Tuple
-
+import logging
 import torch
 from schnetpack.data import AtomsDataModule, AtomsLoader
 
@@ -7,6 +7,7 @@ from aefm.data.atoms import load_dataset
 from aefm.data.loader import _reactions_collate_fn
 from aefm.data import calculate_stats
 
+log = logging.getLogger(__name__)
 
 class Transition1x(AtomsDataModule):
     forces = "forces"  # ωB97x/6–31 G(d): total forces
@@ -84,6 +85,11 @@ class Transition1x(AtomsDataModule):
             self._val_dataset = self.dataset.subset(self.val_idx)
             self._test_dataset = self.dataset.subset(self.test_idx)
 
+            log.info(f"Loaded {len(self.dataset)} samples from {datapath}.")
+            log.info(f"Train dataset size: {len(self._train_dataset)}")
+            log.info(f"Validation dataset size: {len(self._val_dataset)}")
+            log.info(f"Test dataset size: {len(self._test_dataset)}")
+            
         self._setup_transforms()
 
     def get_stats(
