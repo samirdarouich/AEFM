@@ -35,6 +35,10 @@ aefm_train experiment=xtb_ci_neb run.data_dir=/your/custom/data/path
 aefm_sample globals.model=/your/custom/model/path globals.samples_path=/your/custom/samples/path globals.reference_path=/your/custom/reference/path
 ```
 
+## Reproduction
+
+Pretrained models and the dataset, including the data split, are available at: https://zenodo.org/records/16414436
+
 ## 📕 Citation 
 
 @article{darouich2025adaptive,
