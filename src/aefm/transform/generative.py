@@ -129,7 +129,10 @@ class ConditionalFlow(trn.Transform):
 
         # update the returned inputs.
         inputs.update(outputs)
-        rmsd = scatter_mean(((x_1-outputs[self.flow_property])**2).sum(-1), idx_m, dim=0).sqrt()
+        
+        # Compute RMSD between x_t and x_1
+        x_t = outputs[self.flow_property]
+        rmsd = scatter_mean(((x_1-x_t)**2).sum(-1), idx_m, dim=0).sqrt()
         inputs[properties.rmsd+"_intermediate"] = rmsd
 
         return inputs

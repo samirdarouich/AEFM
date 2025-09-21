@@ -1,0 +1,66 @@
+# @package _global_
+
+defaults:
+  - aefm
+
+run:
+  id: basic_conditioned
+
+  
+data:
+  reaction_transforms:
+    - _target_: aefm.transform.reaction.AdaptivePrior
+      target_property: ${globals.flow_property}
+      # Define adaptive prior sigma
+      sigma: ${globals.sigma}
+      # If large sigma is used, it can help to align the input
+      align: False 
+      # Stability parameter for target
+      sigma_x_1: ${globals.sigma_x_1}
+      # condition on R and P
+      conditioned: True
+  
+  transforms:
+    - _target_: flow.transform.ConditionalFlow
+      flow_property: ${globals.flow_property}
+      flow_process: ${globals.flow_process}
+      output_key: ${globals.target_key}
+      time_key: ${globals.time_target_key}
+
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: flow.transform.SubtractCenterOfGeometry
+    - _target_: flow.transform.AllToAllNeighborList
+    - _target_: flow.transform.SubgraphMask # create mask for interfragment edges
+    - _target_: aefm.transform.ComputeDistances
+      name: ${globals.target_positions_key}
+    - _target_: schnetpack.transform.CastTo32
+
+# This defines the training task.
+task:
+  outputs:
+    # Computes the MSE loss between the predicted and target positions
+    - _target_: schnetpack.task.ModelOutput
+      name: ${globals.target_output_key}
+      target_property: ${globals.target_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mse:
+          _target_: torchmetrics.regression.MeanSquaredError
+      loss_weight: 1.0
+      constraints: 
+        - _target_: aefm.task.ConsiderOnlySelectedAtoms # only consider non-conditioning atoms for loss
+          selection_name: _conditions_mask
+    
+    # Computes the physical bond loss to avoid artefacts in generative models
+    - _target_: aefm.task.BondModelOutput
+      name: ${globals.target_output_key}
+      target_property: ${globals.target_positions_key}
+      remove_conditions: True # remove edges to/from conditioning structures
+      cutoff: 2.0
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mse_bond:
+          _target_: torchmetrics.regression.MeanSquaredError
+      loss_weight: 1.0

@@ -17,10 +17,10 @@ num_test: 1073
 num_workers: 8
 
 transforms:
-    - _target_: schnetpack.transform.CastTo64
-    - _target_: aefm.transform.SubtractCenterOfGeometry
-    - _target_: aefm.transform.AllToAllNeighborList
-    - _target_: schnetpack.transform.CastTo32
+  - _target_: schnetpack.transform.CastTo64
+  - _target_: aefm.transform.SubtractCenterOfGeometry
+  - _target_: aefm.transform.AllToAllNeighborList
+  - _target_: schnetpack.transform.CastTo32
 
 # convert to typically used units
 distance_unit: Ang

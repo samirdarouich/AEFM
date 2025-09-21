@@ -84,7 +84,7 @@ def train(config: DictConfig):
     # Check for exisiting config files
     check_existing_config(config, "config_train", train=True)
 
-    if config.get("print_config"):
+    if config.get("print_config", True):
         print_config(config, fields=fields, resolve=False)
 
     if "matmul_precision" in config and config.matmul_precision is not None:

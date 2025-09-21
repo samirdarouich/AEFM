@@ -33,6 +33,14 @@ aefmsampler:
       beta: 1.0       # relaxation parameter
       m: 5            # number of previous iterations to use
       stop_mode: abs  # stop when the absolute error is below eps
+  converter:
+    _target_: aefm.interfaces.ase_interface.ReactionConverter
+    neighbor_list: null # included in transforms
+    transforms:
+      - _target_: schnetpack.transform.CastTo64
+      - _target_: aefm.transform.SubtractCenterOfGeometry
+      - _target_: aefm.transform.AllToAllNeighborList
+      - _target_: schnetpack.transform.CastTo32
   store_path: aefm_samples
   reference_path: ${globals.reference_path}
 

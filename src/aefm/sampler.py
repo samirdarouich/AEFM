@@ -21,28 +21,39 @@ from schnetpack.interfaces.ase_interface import AtomsConverter
 log = logging.getLogger(__name__)
 
 class AEFMSampler:
-    def __init__(self, sampler: Sampler, store_path: str, reference_path: Optional[str]=None, save_trajectory: bool=True):
+    def __init__(self, sampler: Sampler, store_path: str, converter: Optional[AtomsConverter]=None, reference_path: Optional[str]=None, save_trajectory: bool=True):
         """
-            Initializes the sampler with the given model, sampler, storage path, and device.
+            Initializes the sampler with the given model, sampler, storage path, and
+            device.
             Args:
                 sampler: Sampler instance used for sampling.
                 store_path: Path where samples or results will be stored.
-                reference: Optional path to a reference ASE db for comparison. Needs "rxn" as key to match the samples.
-                reference_path: Optional path to a reference ASE Atoms object for RMSD calculation.
+                converter: Optional AtomsConverter for converting ASE Atoms objects to
+                    model inputs. If None, a default converter will be created.
+                reference: Optional path to a reference ASE db for comparison. Needs 
+                    "rxn" as key to match the samples.
+                reference_path: Optional path to a reference ASE Atoms object for
+                    RMSD calculation.
                 save_trajectory: Whether to save the trajectory of the samples.
         """
         self.sampler = sampler
         self.store_path = store_path
         self.reference = {atoms.info["rxn"]: atoms for atoms in ase.io.read(reference_path, index=":")} if reference_path is not None else None
-        self.converter = AtomsConverter(
-            neighbor_list=AllToAllNeighborList(),
-            transforms=[
-                trn.CastTo64(),
-                SubtractCenterOfGeometry(),
-                trn.CastTo32(),
-            ],
-            device=sampler.device,
-        )
+        
+        if converter is not None:
+            self.converter = converter
+        else:
+            # Create a default converter
+            self.converter = AtomsConverter(
+                neighbor_list=AllToAllNeighborList(),
+                transforms=[
+                    trn.CastTo64(),
+                    SubtractCenterOfGeometry(),
+                    trn.CastTo32(),
+                ],
+                device=sampler.device,
+            )
+        self.converter.device = sampler.device
         self.offset = 0
         self.save_trajectory = save_trajectory
         log.info(f"Using device: {self.sampler.device}")
@@ -122,7 +133,11 @@ class AEFMSampler:
                 final_sample.info["n_steps"] = nfe
                 metrics = {"n_steps": f"{nfe:.0f}"}
                 if self.reference and rxn in self.reference:
-                    final_sample, rmsd = get_rmsd(sample=final_sample, reference=ref_atoms, same_order=True)
+                    try:
+                        final_sample, rmsd = get_rmsd(sample=final_sample, reference=ref_atoms, same_order=True)
+                    except:
+                        rmsd = float("nan")
+                        log.warning(f"Could not align sample to reference for reaction {rxn}.")
                     rmsd_final.append(rmsd)
                     metrics["rmsd_final"] = f"{rmsd:.3f}"
                     metrics["rmsd_initial"] = f"{rmsd_init:.3f}"

@@ -51,10 +51,13 @@ class NLLOutput(ModelOutput):
 
 class BondModelOutput(ModelOutput):
     """ Physical bond loss to avoid artefacts in generative models."""
-    def __init__(self, cutoff: float = None, include_pred: bool = False, **kwargs):
+    additional_target_properties = [properties.idx_i, properties.idx_j]
+    
+    def __init__(self, cutoff: float = None, include_pred: bool = False, remove_conditions: bool = True, **kwargs):
         super().__init__(**kwargs)
         self.cutoff = cutoff
         self.include_pred = include_pred
+        self.remove_conditions = remove_conditions
         self.name = self.name + "_distances"
         self.target_property = self.target_property + "_distances"
 
@@ -66,10 +69,27 @@ class BondModelOutput(ModelOutput):
         target_distances = target[self.target_property]
         pred_distances = pred[self.name]
 
-        if target[properties.subgraph_mask] is not None:
-            subgraph_mask = target[properties.subgraph_mask].squeeze().bool()
-            target_distances = target_distances[subgraph_mask]
-            pred_distances = pred_distances[subgraph_mask]
+        if properties.conditions_mask in target:
+            # In case conditioning structures are present and should not be modeled in
+            # the loss, remove these edges.
+            if self.remove_conditions:
+                # get original edge indices
+                idx_i = target[properties.idx_i]
+                idx_j = target[properties.idx_j]
+                
+                # select only edges between non-condition atoms
+                considered_atoms = target[properties.conditions_mask].nonzero()[:, 0]
+                mask = torch.isin(idx_i, considered_atoms) & torch.isin(idx_j, considered_atoms)
+                target_distances = target_distances[mask]
+                pred_distances = pred_distances[mask]
+
+            # In case conditioning structures are present but should be modeled, only
+            # consider distances within each structure but not between different
+            # structures
+            elif target[properties.subgraph_mask] is not None:
+                subgraph_mask = target[properties.subgraph_mask].squeeze().bool()
+                target_distances = target_distances[subgraph_mask]
+                pred_distances = pred_distances[subgraph_mask]
 
         # Mask out distances above cutoff (based on the target distances)
         if self.cutoff is not None and self.cutoff > 0:
@@ -90,10 +110,27 @@ class BondModelOutput(ModelOutput):
         target_distances = target[self.target_property]
         pred_distances = pred[self.name]
 
-        if target[properties.subgraph_mask] is not None:
-            subgraph_mask = target[properties.subgraph_mask].squeeze().bool()
-            target_distances = target_distances[subgraph_mask]
-            pred_distances = pred_distances[subgraph_mask]
+        if properties.conditions_mask in target:
+            # In case conditioning structures are present and should not be modeled in
+            # the loss, remove these edges.
+            if self.remove_conditions:
+                # get original edge indices
+                idx_i = target[properties.idx_i]
+                idx_j = target[properties.idx_j]
+                
+                # select only edges between non-condition atoms
+                considered_atoms = target[properties.conditions_mask].nonzero()[:, 0]
+                mask = torch.isin(idx_i, considered_atoms) & torch.isin(idx_j, considered_atoms)
+                target_distances = target_distances[mask]
+                pred_distances = pred_distances[mask]
+
+            # In case conditioning structures are present but should be modeled, only
+            # consider distances within each structure but not between different
+            # structures
+            elif target[properties.subgraph_mask] is not None:
+                subgraph_mask = target[properties.subgraph_mask].squeeze().bool()
+                target_distances = target_distances[subgraph_mask]
+                pred_distances = pred_distances[subgraph_mask]
 
         # Mask out distances above cutoff
         if self.cutoff is not None and self.cutoff > 0:

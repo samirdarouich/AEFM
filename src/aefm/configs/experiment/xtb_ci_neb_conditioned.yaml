@@ -1,10 +1,10 @@
 # @package _global_
 
 defaults:
-  - aefm
+  - aefm_conditioned
 
 run:
-  id: xtb_ci_neb
+  id: xtb_ci_neb_conditioned
 
 globals:
   sigma: 0.19

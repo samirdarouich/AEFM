@@ -43,12 +43,17 @@ class Sampler:
 
     def _load_model(self, model: Optional[Union[nn.Module, str]]):
         if isinstance(model, str):
+            logger.info(f"Loading model from: '{model}'")
             model = torch.load(
                 model,
                 map_location=self.device,
                 weights_only=False,
-            ).eval()
+            )
+            if type(model) is dict:
+                model = model["hyper_parameters"]["model"]
+            model = model.eval()
         elif model is not None:
+            logger.info(f"Using provided model")
             model = model.to(self.device).eval()
 
         return model

@@ -319,6 +319,8 @@ class AdaptivePrior(GenerativeStrategy):
         target_property: str = properties.R,
         sigma_x_1: float = 0.0,
         align: bool = False,
+        conditioned: bool = False,
+        add_conditions_in_target: bool = False,
     ):
         """
         Args:
@@ -329,12 +331,18 @@ class AdaptivePrior(GenerativeStrategy):
             sigma_x_1: Standard deviation of the noise added to x_1. Can improve
                     stability.
             align: Whether to align x_0 to x_1. Might be helpful when sigma is large.
+            conditioned: Whether to condition the flow model on reactant and product.
+            add_conditions_in_target: Whether to add conditions in the target property.
+                    This is used for inpainting, where the joint distribution instead
+                    of the conditioned distribution is learned.
         """
         super().__init__(
             target_property=target_property,
             sigma_x_0=0.0,
             sigma_x_1=sigma_x_1,
             align=align,
+            conditioned=conditioned,
+            add_conditions_in_target=add_conditions_in_target,
         )
         self.sigma = sigma
         
@@ -342,7 +350,7 @@ class AdaptivePrior(GenerativeStrategy):
         self, inputs: List[Dict[str, torch.Tensor]]
     ) -> List[Dict[str, torch.Tensor]]:
         # Group inputs by image type
-        _, _, transition_state, *_ = _analyze_inputs(inputs)
+        reactant, product, transition_state, *_ = _analyze_inputs(inputs)
 
         assert transition_state is not None, "Transition state must be provided."
 
@@ -369,6 +377,10 @@ class AdaptivePrior(GenerativeStrategy):
         output[properties.image_type] = torch.tensor(
             [properties.IMAGE_TYPES["intermediate_noise"]]
         )
+        
+        if self.conditioned:
+            # If conditions are present add to input
+            output = self._add_conditions(output, [reactant, product])
         
         rmsd = ((x_1-x_0)**2).sum(-1).mean().sqrt()
         output[properties.rmsd+"_initial"] = rmsd.unsqueeze(0)
