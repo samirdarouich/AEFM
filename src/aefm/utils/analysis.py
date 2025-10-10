@@ -130,6 +130,21 @@ def get_total_brute_force_permutations(
     return total_permutations
 
 
+def pymatgen_to_ase(mol: Molecule) -> Atoms:
+    """
+    Convert a pymatgen Molecule object to an ASE Atoms object.
+
+    Args:
+        mol (Molecule): pymatgen Molecule instance.
+
+    Returns:
+        Atoms: ASE Atoms instance.
+    """
+    symbols = [str(s) for s in mol.species]
+    positions = mol.cart_coords
+    return Atoms(symbols=symbols, positions=positions)
+
+
 def pymatgen_align(
     sample: Atoms,
     target: Atoms,
@@ -160,7 +175,6 @@ def pymatgen_align(
         Atoms:
           The aligned sample molecule.
     """
-    aligned_sample_ase = sample.copy()
 
     sample_pymatgen = Molecule(
         species=sample.get_atomic_numbers(), coords=sample.get_positions()
@@ -170,10 +184,10 @@ def pymatgen_align(
     )
 
     if same_order:
-        assert np.all(
-            sample.get_atomic_numbers() == target.get_atomic_numbers()
-        ), "Expected sample and target to have the same atom ordering."
-        log.debug("Use Kabsch Matcher matching.")
+        assert np.all(sample.get_atomic_numbers() == target.get_atomic_numbers()), (
+            "Expected sample and target to have the same atom ordering."
+        )
+        print("Use Kabsch Matcher matching.")
         bfm = KabschMatcher(target_pymatgen)
         aligned_sample, _ = bfm.fit(sample_pymatgen)
     else:
@@ -182,22 +196,23 @@ def pymatgen_align(
         )
 
         if total_permutations < max_permutations:
-            log.debug("Use brute force matching.")
+            print("Use brute force matching.")
             bfm = BruteForceOrderMatcher(target_pymatgen)
             aligned_sample, _ = bfm.fit(sample_pymatgen)
         else:
             bfm = GeneticOrderMatcher(target_pymatgen, threshold=0.5)
             pairs = bfm.fit(sample_pymatgen)
             if len(pairs) == 0:
-                log.debug("Use hungarian order matching.")
+                print("Use hungarian order matching.")
                 bfm = HungarianOrderMatcher(target_pymatgen)
                 aligned_sample, _ = bfm.fit(sample_pymatgen)
             else:
-                log.debug("Use genetic order matching.")
+                print("Use genetic order matching.")
                 min_idx = np.argmin([p[1] for p in pairs])
                 aligned_sample = [p[0] for p in pairs][min_idx]
-
-    aligned_sample_ase.set_positions(aligned_sample.cart_coords)
+    
+    aligned_sample_ase = pymatgen_to_ase(aligned_sample)
+    aligned_sample_ase.info.update(sample.info)
     return aligned_sample_ase
 
 
