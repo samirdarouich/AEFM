@@ -1,0 +1,55 @@
+# @package _global_
+defaults:
+  - aefm
+  - override /callbacks:
+      - checkpoint
+      - lrmonitor
+      - ema
+      - earlystopping
+
+run:
+  id: aefm_hyper
+
+trainer:
+  max_epochs: 2000
+
+callbacks:
+  early_stopping:
+   patience: 400
+
+data:
+
+  # if hyperparameters should be tuned, use oa_reactdiff_split_own, which exlucdes 1000 
+  # training samples for validation
+  split_file: ${run.data_dir}/splits/oa_reactdiff_split_own.npz 
+
+  num_train: 8000
+  num_val: 1000
+  num_test: 1073
+
+# This defines the training task.
+task:
+  skip_exploding_batches: True
+  outputs:
+    # Computes the MSE loss between the predicted and target positions
+    - _target_: schnetpack.task.ModelOutput
+      name: ${globals.target_output_key}
+      target_property: ${globals.target_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mse:
+          _target_: torchmetrics.regression.MeanSquaredError
+      loss_weight: 1.5
+    
+    # Computes the physical bond loss to avoid artefacts in generative models
+    - _target_: aefm.task.BondModelOutput
+      name: ${globals.target_output_key}
+      target_property: ${globals.target_positions_key}
+      cutoff: 2.0
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mse_bond:
+          _target_: torchmetrics.regression.MeanSquaredError
+      loss_weight: 0.5

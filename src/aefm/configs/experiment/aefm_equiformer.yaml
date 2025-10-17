@@ -1,0 +1,104 @@
+# @package _global_
+
+defaults:
+  - aefm
+  - override /callbacks:
+    - checkpoint
+    - lrmonitor
+    - ema
+    - earlystopping
+
+# Check paper for hyperparameters (https://arxiv.org/pdf/2403.09549)
+run:
+  id: basic_equiformer
+
+trainer:
+  gradient_clip_val: 100
+
+# This defines the backbone model.
+model:
+  # Input modules could be computation of distances
+  # LEFTNet does this itself.
+  input_modules:
+    - _target_: aefm.transform.Convert2PyG # Converts schnet inputs to PyG data
+  
+  representation:
+    _target_: aefm.representation.equiformer_v2.equiformer_v2_denoising.EquiformerV2S_OC20_DenoisingPos
+    output_key: ${globals.target_output_key}
+    max_radius: ${globals.cutoff}
+
+  # This is the output modules. It takes the hidden scalar and vectorial
+  # representations and predict the final positions.
+  output_modules:
+    - _target_: aefm.model.heads.DummyHead
+      output_key: ${globals.target_output_key}
+
+  do_postprocessing: True
+  postprocessors:
+    - _target_: aefm.transform.BatchSubtractCenterOfGeometry
+      name: ${globals.target_output_key}
+    # Computes the distances of the predicted positions. Needed for phyiscal loss
+    - _target_: aefm.transform.ComputeDistances
+      name: ${globals.target_output_key}
+
+data:
+
+  # if hyperparameters should be tuned, use oa_reactdiff_split_own, which exlucdes 1000 
+  # training samples for validation
+  split_file: ${run.data_dir}/splits/oa_reactdiff_split_own.npz 
+
+  num_train: 8000
+  num_val: 1000
+  num_test: 1073
+
+  transforms:
+    - _target_: aefm.transform.ConditionalFlow
+      flow_property: ${globals.flow_property}
+      flow_process: ${globals.flow_process}
+      output_key: ${globals.target_key}
+      time_key: ${globals.time_target_key}
+
+    - _target_: schnetpack.transform.CastTo64
+    - _target_: aefm.transform.SubtractCenterOfGeometry
+    - _target_: aefm.transform.AllToAllNeighborList
+    - _target_: aefm.transform.ComputeDistances
+      name: ${globals.target_positions_key}
+    - _target_: schnetpack.transform.CastTo32
+
+# This defines the training task.
+task:
+  skip_exploding_batches: True
+  outputs:
+    # Computes the MSE loss between the predicted and target positions
+    - _target_: schnetpack.task.ModelOutput
+      name: ${globals.target_output_key}
+      target_property: ${globals.target_key}
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mse:
+          _target_: torchmetrics.regression.MeanSquaredError
+      loss_weight: 1.5
+    
+    # Computes the physical bond loss to avoid artefacts in generative models
+    - _target_: aefm.task.BondModelOutput
+      name: ${globals.target_output_key}
+      target_property: ${globals.target_positions_key}
+      cutoff: 2.0
+      loss_fn:
+        _target_: torch.nn.MSELoss
+      metrics:
+        mse_bond:
+          _target_: torchmetrics.regression.MeanSquaredError
+      loss_weight: 0.5
+  
+  # Regularization
+  optimizer_args:
+    weight_decay: 1.0e-3
+
+callbacks:
+  # if early stopping is needed
+  early_stopping:
+    patience: 150
+  ema:
+    decay: 0.999

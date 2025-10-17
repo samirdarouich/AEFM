@@ -9,12 +9,20 @@ from torch_scatter import scatter_mean
 from aefm import properties
 
 __all__ = [
+    "DummyHead",
     "TimePrediction",
     "TimeAwareAtomwise",
     "TimeAwareEquivariant",
 ]
 
+class DummyHead(nn.Module):
+    def __init__(self, output_key: str):
+        super().__init__()
+        self.model_outputs = [output_key]
 
+    def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        return inputs
+    
 class TimePrediction(nn.Module):
     """
     Invariant time prediction head using the spk.atomistic.Atomwise module.

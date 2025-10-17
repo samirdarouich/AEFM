@@ -22,6 +22,7 @@ __all__ = [
     "ComputeDistances",
     "RemoveOffsets",
     "AddOffsets",
+    "Convert2PyG",
 ]
 
 
@@ -240,3 +241,36 @@ class AddOffsets(SnnAddOffsets):
             inputs[self._property] += y0
 
         return inputs
+
+class Convert2PyG(trn.Transform):
+    """
+    Convert data to PyG format.
+    """
+
+    is_preprocessor: bool = True
+    is_postprocessor: bool = True
+
+    def forward(
+        self,
+        inputs: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor]:
+        from torch_geometric.data import Data
+
+        pyg_data = Data()
+
+        for key, value in inputs.items():
+            pyg_data[key] = value
+
+        pyg_data = Data(
+            pos=inputs[properties.R],
+            atomic_numbers=inputs[properties.Z].long(),
+            batch=inputs[properties.idx_m].long(),
+            natoms=inputs[properties.n_atoms].long(),
+            edge_index=torch.stack(
+                [inputs[properties.idx_j], inputs[properties.idx_i]], dim=0
+            ).long(),
+            original_inputs=inputs,
+            # switch j and i definition
+        )
+
+        return pyg_data

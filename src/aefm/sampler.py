@@ -141,6 +141,7 @@ class AEFMSampler:
                     rmsd_final.append(rmsd)
                     metrics["rmsd_final"] = f"{rmsd:.3f}"
                     metrics["rmsd_initial"] = f"{rmsd_init:.3f}"
+                    metrics["rmsd_improvement"] = f"{(rmsd_init - rmsd)/rmsd_init*100:.2f}"
                     trajectory_atoms[0][0].info["rxn"] = rxn
                     final_sample.info["rxn"] = rxn
                 
