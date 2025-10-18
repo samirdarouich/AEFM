@@ -18,7 +18,7 @@ AEFM consists of two main innovations:
 
 ### Adaptive Prior
 
-In order to simulate the expected error from the low-fidelity method during training time, noise is added to a ground truth TS sample in the same magnitude as the expected error of the low-fidelity method. This enables the model to deal with low-fidelity samples from different sources without beeing explicitly trained on them.
+To simulate the expected error of the low-fidelity method during training, noise is added to the ground-truth TS samples with a magnitude matching the typical low-fidelity error. This enables the model to handle low-fidelity samples from different sources without being explicitly trained on them.
 
 ### Equilibrium Flow Matching
 
