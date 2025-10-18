@@ -1,9 +1,6 @@
 import math
 import torch
 
-from ocpmodels.common.registry import registry
-from ocpmodels.common.utils import conditional_grad
-
 try:
     from e3nn import o3
 except ImportError:
@@ -23,8 +20,6 @@ from .equiformer_v2 import EquiformerV2S_OC20
 _AVG_NUM_NODES = 77.81317
 _AVG_DEGREE = 23.395238876342773    # IS2RE: 100k, max_radius = 5, max_neighbors = 100
 
-
-@registry.register_model("equiformer_v2_dens")
 class EquiformerV2S_OC20_DenoisingPos(EquiformerV2S_OC20):
     """
     Equiformer with graph attention built upon SO(2) convolution and feedforward network built upon S2 activation
@@ -98,9 +93,8 @@ class EquiformerV2S_OC20_DenoisingPos(EquiformerV2S_OC20):
         bond_feat_dim=0,  # not used
         num_targets=0,    # not used
         use_pbc=False,
-        regress_forces=True,
-        otf_graph=True,
-        max_neighbors=500,
+        otf_graph=True, #! not used
+        max_neighbors=500, #! not used
         max_radius=5.0,
         max_num_elements=90,
 
@@ -147,9 +141,7 @@ class EquiformerV2S_OC20_DenoisingPos(EquiformerV2S_OC20):
 
         enforce_max_neighbors_strictly=True,
 
-        use_force_encoding=True,
         use_noise_schedule_sigma_encoding=False,
-        use_denoising_energy=True,
 
         use_energy_lin_ref=False,
         load_energy_lin_ref=False,
@@ -159,11 +151,12 @@ class EquiformerV2S_OC20_DenoisingPos(EquiformerV2S_OC20):
             num_atoms,      # not used
             bond_feat_dim,  # not used
             num_targets,    # not used
-            use_pbc,
-            regress_forces,
-            otf_graph,
-            max_neighbors,
-            max_radius,
+            use_pbc, # not used
+            False, # dont regress energy --> only intersted in generative model
+            False, # dont regress forces --> only intersted in generative model
+            otf_graph, # not used
+            max_neighbors, # not used
+            max_radius, # used for distance embedding
             max_num_elements,
 
             num_layers,
@@ -214,9 +207,7 @@ class EquiformerV2S_OC20_DenoisingPos(EquiformerV2S_OC20):
         )
         self.output_key = output_key
         # for denoising position
-        self.use_force_encoding = use_force_encoding
         self.use_noise_schedule_sigma_encoding = use_noise_schedule_sigma_encoding
-        self.use_denoising_energy = use_denoising_energy
         
         # for denoising position, encode node-wise forces as node features
         self.irreps_sh = o3.Irreps.spherical_harmonics(lmax=max(self.lmax_list), p=1)
@@ -232,57 +223,49 @@ class EquiformerV2S_OC20_DenoisingPos(EquiformerV2S_OC20):
                 out_features=self.sphere_channels
             )
 
-        if self.regress_forces:
-            self.denoising_pos_block = SO2EquivariantGraphAttention(
-                self.sphere_channels,
-                self.attn_hidden_channels,
-                self.num_heads,
-                self.attn_alpha_channels,
-                self.attn_value_channels,
-                1,
-                self.lmax_list,
-                self.mmax_list,
-                self.SO3_rotation,
-                self.mappingReduced,
-                self.SO3_grid,
-                self.max_num_elements,
-                self.edge_channels_list,
-                self.block_use_atom_edge_embedding,
-                self.use_m_share_rad,
-                self.attn_activation,
-                self.use_tp_reparam,
-                self.use_s2_act_attn,
-                self.use_attn_renorm,
-                self.use_gate_act,
-                self.use_sep_s2_act,
-                alpha_drop=0.0
-            )
+        self.denoising_pos_block = SO2EquivariantGraphAttention(
+            self.sphere_channels,
+            self.attn_hidden_channels,
+            self.num_heads,
+            self.attn_alpha_channels,
+            self.attn_value_channels,
+            1,
+            self.lmax_list,
+            self.mmax_list,
+            self.SO3_rotation,
+            self.mappingReduced,
+            self.SO3_grid,
+            self.max_num_elements,
+            self.edge_channels_list,
+            self.block_use_atom_edge_embedding,
+            self.use_m_share_rad,
+            self.attn_activation,
+            self.use_tp_reparam,
+            self.use_s2_act_attn,
+            self.use_attn_renorm,
+            self.use_gate_act,
+            self.use_sep_s2_act,
+            alpha_drop=0.0
+        )
 
         self.apply(self._init_weights)
         self.apply(self._uniform_init_rad_func_linear_weights)
 
 
-    @conditional_grad(torch.enable_grad())
+
     def forward(self, data):
         self.batch_size = len(data.natoms)
         self.dtype = data.pos.dtype
         self.device = data.pos.device
-
+        edge_index = data.edge_index
         atomic_numbers = data.atomic_numbers.long()
         num_atoms = len(atomic_numbers)
 
-        (
-            edge_index,
-            edge_distance,
-            edge_distance_vec,
-            cell_offsets,
-            _,  # cell offset distances
-            neighbors,
-        ) = self.generate_graph(
-            data,
-            enforce_max_neighbors_strictly=self.enforce_max_neighbors_strictly,
-        )
-
+        # Get edge distance vectors and distances
+        j, i = edge_index
+        edge_distance_vec = data.pos[j] - data.pos[i]
+        edge_distance = edge_distance_vec.norm(dim=-1)
+        
         ###############################################################
         # Initialize data structures
         ###############################################################
@@ -322,38 +305,6 @@ class EquiformerV2S_OC20_DenoisingPos(EquiformerV2S_OC20):
                     )[:, offset : offset + self.sphere_channels]
             offset = offset + self.sphere_channels
             offset_res = offset_res + int((self.lmax_list[i] + 1) ** 2)
-
-        # Node-wise force encoding during denoising positions
-        force_embedding = SO3_Embedding(num_atoms, self.lmax_list, 1, self.device, self.dtype)
-        if hasattr(data, "denoising_pos_forward") and data.denoising_pos_forward:
-            assert hasattr(data, "forces")
-            force_data = data.forces
-            force_sh = o3.spherical_harmonics(
-                l=self.irreps_sh,
-                x=force_data,
-                normalize=True,
-                normalization='component'
-            )
-            force_sh = force_sh.view(num_atoms, (max(self.lmax_list) + 1) ** 2, 1)
-            force_norm = force_data.norm(dim=-1, keepdim=True)
-            if hasattr(data, "noise_mask"):
-                noise_mask_tensor = data.noise_mask.view(-1, 1, 1)
-                force_sh = force_sh * noise_mask_tensor
-        else:
-            force_sh = torch.zeros((num_atoms, (max(self.lmax_list) + 1) ** 2, 1), dtype=data.pos.dtype, device=data.pos.device)
-            force_norm = torch.zeros((num_atoms, 1), dtype=data.pos.dtype, device=data.pos.device)
-
-        if not self.use_force_encoding:
-            # for ablation study, we enforce the force encoding to be zero.
-            force_sh = torch.zeros((num_atoms, (max(self.lmax_list) + 1) ** 2, 1), dtype=data.pos.dtype, device=data.pos.device)
-            force_norm = torch.zeros((num_atoms, 1), dtype=data.pos.dtype, device=data.pos.device)
-
-        force_norm = force_norm.view(-1, 1, 1)
-        force_norm = force_norm / math.sqrt(3.0)  # since we use `component` normalization
-        force_embedding.embedding = force_sh * force_norm
-
-        force_embedding = self.force_embedding(force_embedding)
-        x.embedding = x.embedding + force_embedding.embedding
 
         # noise schedule sigma encoding
         if self.use_noise_schedule_sigma_encoding:
@@ -399,43 +350,6 @@ class EquiformerV2S_OC20_DenoisingPos(EquiformerV2S_OC20):
         x.embedding = self.norm(x.embedding)
 
         ###############################################################
-        # Energy estimation
-        ###############################################################
-        # node_energy = self.energy_block(x)
-        # node_energy = node_energy.embedding.narrow(1, 0, 1)
-        # energy = torch.zeros(len(data.natoms), device=node_energy.device, dtype=node_energy.dtype)
-        # energy.index_add_(0, data.batch, node_energy.view(-1))
-        # energy = energy / self.avg_num_nodes
-
-        # # Add the per-atom linear references to the energy.
-        # if self.use_energy_lin_ref and self.load_energy_lin_ref:
-        #     # During training, target E = (E_DFT - E_ref - E_mean) / E_std, and
-        #     # during inference, \hat{E_DFT} = \hat{E} * E_std + E_ref + E_mean
-        #     # where
-        #     #
-        #     # E_DFT = raw DFT energy,
-        #     # E_ref = reference energy,
-        #     # E_mean = normalizer mean,
-        #     # E_std = normalizer std,
-        #     # \hat{E} = predicted energy,
-        #     # \hat{E_DFT} = predicted DFT energy.
-        #     #
-        #     # We can also write this as
-        #     # \hat{E_DFT} = E_std * (\hat{E} + E_ref / E_std) + E_mean,
-        #     # which is why we save E_ref / E_std as the linear reference.
-        #     with torch.cuda.amp.autocast(False):
-        #         energy = energy.to(self.energy_lin_ref.dtype).index_add(
-        #             0,
-        #             data.batch,
-        #             self.energy_lin_ref[atomic_numbers],
-        #         )
-
-        # # zero out denoising energy for ablation study
-        # if hasattr(data, "denoising_pos_forward") and data.denoising_pos_forward:
-        #     if not self.use_denoising_energy:
-        #         energy = energy * 0.0
-
-        ###############################################################
         # Denoising estimation
         ###############################################################
         
@@ -447,41 +361,10 @@ class EquiformerV2S_OC20_DenoisingPos(EquiformerV2S_OC20):
             edge_index
         )
         denoising_pos_vec = denoising_pos_vec.embedding.narrow(1, 1, 3)
-        denoising_pos_vec = denoising_pos_vec.view(-1, 3)
+        denoising_pos_vec = denoising_pos_vec.view(-1, 3).contiguous()
 
         # get back the original schnet pack inputs
         outputs = data.original_inputs
-        outputs[self.output_key] = denoising_pos_vec.contiguous() # the last is because of some schnetpack error
+        outputs[self.output_key] = denoising_pos_vec
         
-        # if self.regress_forces:
-        #     forces = self.force_block(x,
-        #         atomic_numbers,
-        #         edge_distance,
-        #         edge_index
-        #     )
-        #     forces = forces.embedding.narrow(1, 1, 3)
-        #     forces = forces.view(-1, 3)
-
-        #     # for denoising positions
-        #     denoising_pos_vec = self.denoising_pos_block(
-        #         x,
-        #         atomic_numbers,
-        #         edge_distance,
-        #         edge_index
-        #     )
-        #     denoising_pos_vec = denoising_pos_vec.embedding.narrow(1, 1, 3)
-        #     denoising_pos_vec = denoising_pos_vec.view(-1, 3)
-
-        # if self.regress_forces:
-        #     if hasattr(data, "denoising_pos_forward") and data.denoising_pos_forward:
-        #         if hasattr(data, "noise_mask"):
-        #             noise_mask_tensor = data.noise_mask.view(-1, 1)
-        #             forces = denoising_pos_vec * noise_mask_tensor + forces * (~noise_mask_tensor)
-        #         else:
-        #             forces = denoising_pos_vec + 0 * forces
-        #     else:
-        #         forces = 0 * denoising_pos_vec + forces
-
-        #     outputs["forces"] = forces
-
         return outputs

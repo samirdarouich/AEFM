@@ -28,6 +28,7 @@ class ASEReactionData(ASEAtomsData):
         subset_idx: Optional[List[int]] = None,
         property_units: Optional[Dict[str, str]] = None,
         distance_unit: Optional[str] = None,
+        reaction_id_key: str = "reaction_ids_unique",
         group_by_reaction: bool = True,
         include_final_intermediates: bool = False,
         include_all_intermediates: bool = False,
@@ -60,10 +61,11 @@ class ASEReactionData(ASEAtomsData):
             distance_unit=distance_unit,
         )
 
+        self.reaction_transforms = reaction_transforms  # type: ignore
+        self.reaction_id_key = reaction_id_key
+        self.group_by_reaction = group_by_reaction
         self.include_final_intermediates = include_final_intermediates
         self.include_all_intermediates = include_all_intermediates
-        self.reaction_transforms = reaction_transforms  # type: ignore
-        self.group_by_reaction = group_by_reaction
 
         # Cache reaction meta data
         self._cache_reaction_metadata()
@@ -96,7 +98,7 @@ class ASEReactionData(ASEAtomsData):
         self._image_types = []
         for i, (ridx, itype) in enumerate(
             zip(
-                self.metadata["groups_ids"]["reaction_ids"],
+                self.metadata["groups_ids"][self.reaction_id_key],
                 self.metadata["groups_ids"]["image_type"],
             )
         ):

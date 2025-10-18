@@ -2,10 +2,7 @@ import math
 import torch
 import torch.nn as nn
 
-from ocpmodels.common.registry import registry
-from ocpmodels.common.utils import conditional_grad
-from ocpmodels.models.base import BaseModel
-from ocpmodels.models.scn.smearing import GaussianSmearing
+from .smearing import GaussianSmearing
 
 try:
     from e3nn import o3
@@ -21,7 +18,6 @@ from .so3 import (
     SO3_Rotation,
     SO3_LinearV2
 )
-from .escn_eff import ModuleListInfo
 from .radial_function import RadialFunction
 from .layer_norm import (
     EquivariantLayerNormArray,
@@ -37,7 +33,15 @@ from .transformer_block import (
 )
 from .input_block import EdgeDegreeEmbedding
 
+class ModuleListInfo(torch.nn.ModuleList):
+    def __init__(self, info_str, modules=None):
+        super().__init__(modules)
+        self.info_str = str(info_str)
 
+
+    def __repr__(self):
+        return self.info_str
+    
 # Statistics of IS2RE 100K
 _AVG_NUM_NODES = 77.81317
 _AVG_DEGREE = 23.395238876342773    # IS2RE: 100k, max_radius = 5, max_neighbors = 100
@@ -46,8 +50,7 @@ _NORM_SCALE_NODES = math.sqrt(_AVG_NUM_NODES)   # 8.82117735906041
 _NORM_SCALE_DEGREE = math.sqrt(_AVG_DEGREE)     # 4.836862503353054
 
 
-@registry.register_model("equiformer_v2")
-class EquiformerV2S_OC20(BaseModel):
+class EquiformerV2S_OC20(nn.Module):
     """
     Equiformer with graph attention built upon SO(2) convolution and feedforward network built upon S2 activation
 
@@ -113,6 +116,7 @@ class EquiformerV2S_OC20(BaseModel):
         bond_feat_dim,  # not used
         num_targets,    # not used
         use_pbc=True,
+        regress_energy=True,
         regress_forces=True,
         otf_graph=True,
         max_neighbors=500,
@@ -168,6 +172,7 @@ class EquiformerV2S_OC20(BaseModel):
         super().__init__()
 
         self.use_pbc = use_pbc
+        self.regress_energy = regress_energy
         self.regress_forces = regress_forces
         self.otf_graph = otf_graph
         self.max_neighbors = max_neighbors
@@ -337,18 +342,20 @@ class EquiformerV2S_OC20(BaseModel):
 
         # Output blocks for energy and forces
         self.norm = get_normalization_layer(self.norm_type, lmax=max(self.lmax_list), num_channels=self.sphere_channels)
-        self.energy_block = FeedForwardNetwork(
-            self.sphere_channels,
-            self.ffn_hidden_channels,
-            1,
-            self.lmax_list,
-            self.mmax_list,
-            self.SO3_grid,
-            self.ffn_activation,
-            self.use_gate_act,
-            self.use_grid_mlp,
-            self.use_sep_s2_act
-        )
+        
+        if self.regress_energy:
+            self.energy_block = FeedForwardNetwork(
+                self.sphere_channels,
+                self.ffn_hidden_channels,
+                1,
+                self.lmax_list,
+                self.mmax_list,
+                self.SO3_grid,
+                self.ffn_activation,
+                self.use_gate_act,
+                self.use_grid_mlp,
+                self.use_sep_s2_act
+            )
         if self.regress_forces:
             self.force_block = SO2EquivariantGraphAttention(
                 self.sphere_channels,
@@ -385,147 +392,146 @@ class EquiformerV2S_OC20(BaseModel):
         self.apply(self._uniform_init_rad_func_linear_weights)
 
 
-    @conditional_grad(torch.enable_grad())
-    def forward(self, data):
-        self.batch_size = len(data.natoms)
-        self.dtype = data.pos.dtype
-        self.device = data.pos.device
+    # def forward(self, data):
+    #     self.batch_size = len(data.natoms)
+    #     self.dtype = data.pos.dtype
+    #     self.device = data.pos.device
 
-        atomic_numbers = data.atomic_numbers.long()
-        num_atoms = len(atomic_numbers)
+    #     atomic_numbers = data.atomic_numbers.long()
+    #     num_atoms = len(atomic_numbers)
 
-        (
-            edge_index,
-            edge_distance,
-            edge_distance_vec,
-            cell_offsets,
-            _,  # cell offset distances
-            neighbors,
-        ) = self.generate_graph(
-            data,
-            enforce_max_neighbors_strictly=self.enforce_max_neighbors_strictly,
-        )
+    #     (
+    #         edge_index,
+    #         edge_distance,
+    #         edge_distance_vec,
+    #         cell_offsets,
+    #         _,  # cell offset distances
+    #         neighbors,
+    #     ) = self.generate_graph(
+    #         data,
+    #         enforce_max_neighbors_strictly=self.enforce_max_neighbors_strictly,
+    #     )
 
-        ###############################################################
-        # Initialize data structures
-        ###############################################################
+    #     ###############################################################
+    #     # Initialize data structures
+    #     ###############################################################
 
-        # Compute 3x3 rotation matrix per edge
-        edge_rot_mat = self._init_edge_rot_mat(
-            data, edge_index, edge_distance_vec
-        )
+    #     # Compute 3x3 rotation matrix per edge
+    #     edge_rot_mat = self._init_edge_rot_mat(
+    #         data, edge_index, edge_distance_vec
+    #     )
 
-        # Initialize the WignerD matrices and other values for spherical harmonic calculations
-        for i in range(self.num_resolutions):
-            self.SO3_rotation[i].set_wigner(edge_rot_mat)
+    #     # Initialize the WignerD matrices and other values for spherical harmonic calculations
+    #     for i in range(self.num_resolutions):
+    #         self.SO3_rotation[i].set_wigner(edge_rot_mat)
 
-        ###############################################################
-        # Initialize node embeddings
-        ###############################################################
+    #     ###############################################################
+    #     # Initialize node embeddings
+    #     ###############################################################
 
-        # Init per node representations using an atomic number based embedding
-        offset = 0
-        x = SO3_Embedding(
-            num_atoms,
-            self.lmax_list,
-            self.sphere_channels,
-            self.device,
-            self.dtype,
-        )
+    #     # Init per node representations using an atomic number based embedding
+    #     offset = 0
+    #     x = SO3_Embedding(
+    #         num_atoms,
+    #         self.lmax_list,
+    #         self.sphere_channels,
+    #         self.device,
+    #         self.dtype,
+    #     )
 
-        offset_res = 0
-        offset = 0
-        # Initialize the l = 0, m = 0 coefficients for each resolution
-        for i in range(self.num_resolutions):
-            if self.num_resolutions == 1:
-                x.embedding[:, offset_res, :] = self.sphere_embedding(atomic_numbers)
-            else:
-                x.embedding[:, offset_res, :] = self.sphere_embedding(
-                    atomic_numbers
-                    )[:, offset : offset + self.sphere_channels]
-            offset = offset + self.sphere_channels
-            offset_res = offset_res + int((self.lmax_list[i] + 1) ** 2)
+    #     offset_res = 0
+    #     offset = 0
+    #     # Initialize the l = 0, m = 0 coefficients for each resolution
+    #     for i in range(self.num_resolutions):
+    #         if self.num_resolutions == 1:
+    #             x.embedding[:, offset_res, :] = self.sphere_embedding(atomic_numbers)
+    #         else:
+    #             x.embedding[:, offset_res, :] = self.sphere_embedding(
+    #                 atomic_numbers
+    #                 )[:, offset : offset + self.sphere_channels]
+    #         offset = offset + self.sphere_channels
+    #         offset_res = offset_res + int((self.lmax_list[i] + 1) ** 2)
 
-        # Edge encoding (distance and atom edge)
-        edge_distance = self.distance_expansion(edge_distance)
-        if self.share_atom_edge_embedding and self.use_atom_edge_embedding:
-            source_element = atomic_numbers[edge_index[0]]  # Source atom atomic number
-            target_element = atomic_numbers[edge_index[1]]  # Target atom atomic number
-            source_embedding = self.source_embedding(source_element)
-            target_embedding = self.target_embedding(target_element)
-            edge_distance = torch.cat((edge_distance, source_embedding, target_embedding), dim=1)
+    #     # Edge encoding (distance and atom edge)
+    #     edge_distance = self.distance_expansion(edge_distance)
+    #     if self.share_atom_edge_embedding and self.use_atom_edge_embedding:
+    #         source_element = atomic_numbers[edge_index[0]]  # Source atom atomic number
+    #         target_element = atomic_numbers[edge_index[1]]  # Target atom atomic number
+    #         source_embedding = self.source_embedding(source_element)
+    #         target_embedding = self.target_embedding(target_element)
+    #         edge_distance = torch.cat((edge_distance, source_embedding, target_embedding), dim=1)
 
-        # Edge-degree embedding
-        edge_degree = self.edge_degree_embedding(
-            atomic_numbers,
-            edge_distance,
-            edge_index)
-        x.embedding = x.embedding + edge_degree.embedding
+    #     # Edge-degree embedding
+    #     edge_degree = self.edge_degree_embedding(
+    #         atomic_numbers,
+    #         edge_distance,
+    #         edge_index)
+    #     x.embedding = x.embedding + edge_degree.embedding
 
-        ###############################################################
-        # Update spherical node embeddings
-        ###############################################################
+    #     ###############################################################
+    #     # Update spherical node embeddings
+    #     ###############################################################
 
-        for i in range(self.num_layers):
-            x = self.blocks[i](
-                x,                  # SO3_Embedding
-                atomic_numbers,
-                edge_distance,
-                edge_index,
-                batch=data.batch    # for GraphDropPath
-            )
+    #     for i in range(self.num_layers):
+    #         x = self.blocks[i](
+    #             x,                  # SO3_Embedding
+    #             atomic_numbers,
+    #             edge_distance,
+    #             edge_index,
+    #             batch=data.batch    # for GraphDropPath
+    #         )
 
-        # Final layer norm
-        x.embedding = self.norm(x.embedding)
+    #     # Final layer norm
+    #     x.embedding = self.norm(x.embedding)
 
-        ###############################################################
-        # Energy estimation
-        ###############################################################
-        node_energy = self.energy_block(x)
-        node_energy = node_energy.embedding.narrow(1, 0, 1)
-        energy = torch.zeros(len(data.natoms), device=node_energy.device, dtype=node_energy.dtype)
-        energy.index_add_(0, data.batch, node_energy.view(-1))
-        energy = energy / self.avg_num_nodes
+    #     ###############################################################
+    #     # Energy estimation
+    #     ###############################################################
+    #     node_energy = self.energy_block(x)
+    #     node_energy = node_energy.embedding.narrow(1, 0, 1)
+    #     energy = torch.zeros(len(data.natoms), device=node_energy.device, dtype=node_energy.dtype)
+    #     energy.index_add_(0, data.batch, node_energy.view(-1))
+    #     energy = energy / self.avg_num_nodes
 
-        # Add the per-atom linear references to the energy.
-        if self.use_energy_lin_ref and self.load_energy_lin_ref:
-            # During training, target E = (E_DFT - E_ref - E_mean) / E_std, and
-            # during inference, \hat{E_DFT} = \hat{E} * E_std + E_ref + E_mean
-            # where
-            #
-            # E_DFT = raw DFT energy,
-            # E_ref = reference energy,
-            # E_mean = normalizer mean,
-            # E_std = normalizer std,
-            # \hat{E} = predicted energy,
-            # \hat{E_DFT} = predicted DFT energy.
-            #
-            # We can also write this as
-            # \hat{E_DFT} = E_std * (\hat{E} + E_ref / E_std) + E_mean,
-            # which is why we save E_ref / E_std as the linear reference.
-            energy.index_add_(
-                0,
-                data.batch,
-                self.energy_lin_ref[atomic_numbers].to(node_energy.dtype),
-            )
+    #     # Add the per-atom linear references to the energy.
+    #     if self.use_energy_lin_ref and self.load_energy_lin_ref:
+    #         # During training, target E = (E_DFT - E_ref - E_mean) / E_std, and
+    #         # during inference, \hat{E_DFT} = \hat{E} * E_std + E_ref + E_mean
+    #         # where
+    #         #
+    #         # E_DFT = raw DFT energy,
+    #         # E_ref = reference energy,
+    #         # E_mean = normalizer mean,
+    #         # E_std = normalizer std,
+    #         # \hat{E} = predicted energy,
+    #         # \hat{E_DFT} = predicted DFT energy.
+    #         #
+    #         # We can also write this as
+    #         # \hat{E_DFT} = E_std * (\hat{E} + E_ref / E_std) + E_mean,
+    #         # which is why we save E_ref / E_std as the linear reference.
+    #         energy.index_add_(
+    #             0,
+    #             data.batch,
+    #             self.energy_lin_ref[atomic_numbers].to(node_energy.dtype),
+    #         )
 
-        ###############################################################
-        # Force estimation
-        ###############################################################
-        if self.regress_forces:
-            forces = self.force_block(
-                x,
-                atomic_numbers,
-                edge_distance,
-                edge_index
-            )
-            forces = forces.embedding.narrow(1, 1, 3)
-            forces = forces.view(-1, 3)
+    #     ###############################################################
+    #     # Force estimation
+    #     ###############################################################
+    #     if self.regress_forces:
+    #         forces = self.force_block(
+    #             x,
+    #             atomic_numbers,
+    #             edge_distance,
+    #             edge_index
+    #         )
+    #         forces = forces.embedding.narrow(1, 1, 3)
+    #         forces = forces.view(-1, 3)
 
-        if not self.regress_forces:
-            return energy
-        else:
-            return energy, forces
+    #     if not self.regress_forces:
+    #         return energy
+    #     else:
+    #         return energy, forces
 
     # Initialize the edge rotation matrics
     def _init_edge_rot_mat(self, data, edge_index, edge_distance_vec):

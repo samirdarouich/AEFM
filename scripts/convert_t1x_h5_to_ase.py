@@ -203,6 +203,7 @@ dataset.add_systems(property_list=properties_sorted, atoms_list=atoms_list_sorte
 dataset.update_metadata(
     groups_ids={
         "reaction_ids": reaction_ids_sorted,
+        "reaction_ids_unique": reaction_ids_sorted,
         "image_type": type_list_sorted,
         "formula": formula_list_sorted,
     }
@@ -227,6 +228,7 @@ dataset.add_systems(
 dataset.update_metadata(
     groups_ids={
         "reaction_ids": [reaction_ids_sorted[i] for i in ts_ids],
+        "reaction_ids_unique": [reaction_ids_sorted[i] for i in ts_ids],
         "image_type": [type_list_sorted[i] for i in ts_ids],
         "formula": [formula_list_sorted[i] for i in ts_ids],
     }

@@ -28,7 +28,9 @@ model:
     max_radius: ${globals.cutoff}
 
   # This is the output modules. It takes the hidden scalar and vectorial
-  # representations and predict the final positions.
+  # representations and predict the final positions. Equiformer V2 already
+  # predicts the positions within the network. So this is just a dummy head,
+  # as it is required by the workflow
   output_modules:
     - _target_: aefm.model.heads.DummyHead
       output_key: ${globals.target_output_key}
