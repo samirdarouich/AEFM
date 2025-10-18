@@ -11,15 +11,32 @@ Samir Darouich, Vinh Tong, Tanja Bien, Johannes Kästner, Mathias Niepert
 
 In this work, we introduce a new generative AI approach that improves the quality of initial guesses for TS structures. Our method can be combined with a variety of existing techniques, including both machine learning models and fast, approximate quantum methods, to refine their predictions and bring them closer to chemically accurate results.
 
+AEFM consists of two main innovations:
+
+1) Adaptive Prior
+2) Equilibrium Flow Matching
+
+### Adaptive Prior
+
+In order to simulate the expected error from the low-fidelity method during training time, noise is added to a ground truth TS sample in the same magnitude as the expected error of the low-fidelity method. This enables the model to deal with low-fidelity samples from different sources without beeing explicitly trained on them.
+
+### Equilibrium Flow Matching
+
+In our Equilibrium Flow Matching (EFM) framework, the model learns to predict the endpoint of the integration path and refines this estimate through fixed-point iteration until convergence — effectively acting as a learned approximation of the ODE solution operator. Combined with Anderson acceleration, EFM enables stable and remarkably fast inference, requiring only a fraction of inference steps compared to conventional flow matching. Conceptually, EFM mirrors the inference procedure in Deep Equilibrium Models where a neural network is iterated to convergence at test time to find a fixed point.
+
+
+https://github.com/user-attachments/assets/e86fbaf5-941e-459b-8e57-e88d07041ac8
+
+
 
 ## 📦 Installation
 
 We recommend using a conda environment:
 
 ```bash
-conda create -n aefm python=3.10
+conda create -n aefm python=3.12
 conda activate aefm
-pip install .
+pip install -e .
 ```
 
 ## ⚙️ Usage
