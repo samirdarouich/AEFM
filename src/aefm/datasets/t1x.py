@@ -26,6 +26,7 @@ class Transition1x(AtomsDataModule):
         include_final_intermediates: bool = False,
         include_all_intermediates: bool = False,
         reaction_transforms: Optional[List[torch.nn.Module]] = None,
+        reaction_id_key: str = "reaction_ids_unique",
         persistent_workers: bool = False,
         **kwargs,
     ):
@@ -48,10 +49,11 @@ class Transition1x(AtomsDataModule):
         super().__init__(datapath=datapath, batch_size=batch_size, **kwargs)
 
         # Additional parameters
+        self.group_by_reaction = group_by_reaction
         self.include_final_intermediates = include_final_intermediates
         self.include_all_intermediates = include_all_intermediates
         self.reaction_transforms = reaction_transforms
-        self.group_by_reaction = group_by_reaction
+        self.reaction_id_key = reaction_id_key
         self.persistent_workers = persistent_workers
 
     def setup(self, stage=None):
@@ -70,10 +72,11 @@ class Transition1x(AtomsDataModule):
                 property_units=self.property_units,
                 distance_unit=self.distance_unit,
                 load_properties=self.load_properties,
+                group_by_reaction=self.group_by_reaction,
                 include_final_intermediates=self.include_final_intermediates,
                 include_all_intermediates=self.include_all_intermediates,
                 reaction_transforms=self.reaction_transforms,
-                group_by_reaction=self.group_by_reaction,
+                reaction_id_key=self.reaction_id_key,
             )
 
             # load and generate partitions if needed

@@ -40,9 +40,9 @@ globals:
   # target distances for physical loss
   target_positions_key: target__positions
   
-  # Flow process to define x_t
+  # Flow process to define x_t and target v_t
   flow_process:
-    _target_: aefm.processes.CondOTCFM
+    _target_: aefm.processes.VFM
     sigma: 0.05
     invariant: True 
     dtype: float64

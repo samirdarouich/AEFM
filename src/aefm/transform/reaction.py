@@ -354,8 +354,11 @@ class AdaptivePrior(GenerativeStrategy):
 
         assert transition_state is not None, "Transition state must be provided."
 
-        # Get source as transition state + random noise
+        # Get Transition state as target and remove COP for translational invariance
         x_1 = transition_state[self.target_property]
+        x_1 = x_1 - x_1.mean(dim=0)
+        
+        # Get source as transition state + random noise
         x_0 = self._add_noise(x_1, self.sigma)
         
         # If wanted add noise to x_1 (can improve stability)

@@ -9,8 +9,10 @@ import tempfile
 import uuid
 from typing import List
 
+import ase
 import hydra
 import numpy as np
+import schnetpack as spk
 import torch
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import (
@@ -18,17 +20,15 @@ from pytorch_lightning import (
     LightningDataModule,
     Trainer,
     seed_everything,
+)
+from pytorch_lightning import (
     callbacks as pl_callbacks,
 )
 from pytorch_lightning.loggers.logger import Logger
-import ase
-
-import schnetpack as spk
 from schnetpack.utils import str2class
 from schnetpack.utils.script import log_hyperparameters, print_config
 
 from aefm.utils.script import check_existing_config
-
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +57,7 @@ header = """
 ░▒▓█▓▒  ▒▓█▓▒ ▒▓█▓▒░       ▒▓█▓▒░       ░▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒ 
 ░▒▓█▓▒  ▒▓█▓▒ ▒▓████████▓▒ ▒▓█▓▒░       ░▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒ 
 """
+
 
 @hydra.main(config_path="configs", config_name="train", version_base="1.2")
 def train(config: DictConfig):
@@ -183,7 +184,7 @@ def train(config: DictConfig):
                     f"Found old checkpoint at <{config.run.ckpt_path}>. Overwriting "
                     "patience of early stopping callback."
                 )
-                ckpt = torch.load(config.run.ckpt_path)
+                ckpt = torch.load(config.run.ckpt_path, map_location="cpu")
                 if "callbacks" in ckpt:
                     for callback, value in ckpt["callbacks"].items():
                         if "EarlyStopping" in callback:
@@ -210,30 +211,39 @@ def train(config: DictConfig):
     best_task.save_model(config.globals.model_path, do_postprocessing=True)
     log.info(f"Best model stored at {os.path.abspath(config.globals.model_path)}")
 
+fields = (
+    "run",
+    "globals",
+    "aefmsampler",
+)
 
 @hydra.main(config_path="configs", config_name="sample", version_base="1.2")
 def sample(config: DictConfig):
-    
     print(header)
     log.info("Running on host: " + str(socket.gethostname()))
-    
-    if OmegaConf.is_missing(config, "globals.model") or OmegaConf.is_missing(config, "globals.samples_path"):
+
+    if OmegaConf.is_missing(config, "globals.model") or OmegaConf.is_missing(
+        config, "globals.samples_path"
+    ):
         log.error(
             """
                 Config incomplete! You have to specify at least `samples_path` and `model`!
             """
         )
         return
-    
+
+    if config.get("print_config", True):
+        print_config(config, fields=fields, resolve=False)
+
     # Init sampler
     log.info(f"Instantiating sampler <{config.aefmsampler._target_}>")
     sampler = hydra.utils.instantiate(config.aefmsampler)
 
     # Load samples
     log.info(f"Loading samples from <{config.globals.samples_path}>")
-    samples = ase.io.read(config.globals.samples_path,index=":")
+    samples = ase.io.read(config.globals.samples_path, index=":")
     log.info(f"Loaded {len(samples)} samples.")
-    
+
     # Sample
     log.info("Sampling...")
     sampler.sample(samples)

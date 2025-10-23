@@ -1,12 +1,16 @@
-import numpy as np
-from ase.io import read
 import argparse
 from pathlib import Path
+
+import numpy as np
+from ase.io import read
 from schnetpack.data import ASEAtomsData
 from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description="Convert extended XYZ to an ASE database.")
-parser.add_argument("--data_path", help="Path to input extended xyz file (or pattern) to read with ase.io.read. Assumes R, TS, P for each reaction in this order.")
+parser.add_argument(
+    "--data_path",
+    help="Path to input extended xyz file (or pattern) to read with ase.io.read. Assumes R, TS, P for each reaction in this order.",
+)
 parser.add_argument("--output_path", help="Path to output ASE database file")
 parser.add_argument(
     "--unlabeled",
@@ -46,7 +50,7 @@ if out_dir and not out_dir.exists():
 database = read(data_path, index=":")
 assert len(database) % 3 == 0, "Database length is not multiple of 3 (R, TS, P)"
 
-print(f"Total reactions in input data: {len(database)//3}")
+print(f"Total reactions in input data: {len(database) // 3}")
 
 reactants, transition_states, products = database[0::3], database[1::3], database[2::3]
 
@@ -73,6 +77,10 @@ for i in tqdm(range(len(reactants)), desc="Processing reactions"):
 
     path = [reactant, transition_state, product]
 
+    # Remove COP
+    for p in path:
+        p.positions = p.positions - p.positions.mean(axis=0)
+
     if labeled_dataset:
         properties.extend(
             {"energy": np.array([p.get_potential_energy()]), "forces": p.get_forces()}
@@ -80,13 +88,13 @@ for i in tqdm(range(len(reactants)), desc="Processing reactions"):
         )
     else:
         properties.extend({} for p in path)
-        
+
     atoms_list.extend(path)
     type_list.extend([p.info["type"] for p in path])
     reaction_ids.extend([rxn for _ in path])
     reaction_ids_unique.extend([rxn_unique for _ in path])
     formula_list.extend([formula for _ in path])
-    
+
     for key in meta_keys:
         for p in path:
             if key in p.info:
@@ -94,7 +102,9 @@ for i in tqdm(range(len(reactants)), desc="Processing reactions"):
             elif hasattr(p, key):
                 meta_data[key].append(getattr(p, key))
             else:
-                raise KeyError(f"Metadata key '{key}' not found in atoms.info or as Atoms attribute.")
+                raise KeyError(
+                    f"Metadata key '{key}' not found in atoms.info or as Atoms attribute."
+                )
 
 # Sort after reaction index
 sorting_idx = sorted(range(len(reaction_ids)), key=lambda x: reaction_ids[x])

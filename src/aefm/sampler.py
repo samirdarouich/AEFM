@@ -17,6 +17,7 @@ from aefm.transform import (
     SubtractCenterOfGeometry,
 )
 from schnetpack.interfaces.ase_interface import AtomsConverter
+import time
 
 log = logging.getLogger(__name__)
 
@@ -97,6 +98,7 @@ class AEFMSampler:
         rmsd_initial = []
         rmsd_final = []
         n_iterations = []
+        times = []
         
         db_path = os.path.join(self.store_path, "samples.xyz")
         if os.path.exists(db_path):
@@ -117,7 +119,11 @@ class AEFMSampler:
                     rmsd_initial.append(rmsd_init)
                     
                 batch = self.converter(sample)
+                start_time = time.time()
                 nfe, results = self.sampler(batch)
+                end_time = time.time()
+                sampling_time = end_time - start_time
+                times.append(sampling_time)
                 n_iterations.append(nfe)
                 
                 # This is a list of iterations for all molecules at each iteration
@@ -130,7 +136,12 @@ class AEFMSampler:
                 
                 # Check the last atom in the trajectory
                 final_sample = trajectory_atoms[0][-1]
+                final_sample.info.update(sample.info)
+                final_sample.info.pop("rmsd", None) # remove previous rmsd if exists
+                final_sample.info["type"] = "aefm_sample"
                 final_sample.info["n_steps"] = nfe
+                final_sample.info["sampling_time"] = round(sampling_time,2)
+                final_sample.info["rxn"] = rxn
                 metrics = {"n_steps": f"{nfe:.0f}"}
                 if self.reference and rxn in self.reference:
                     try:
@@ -143,7 +154,7 @@ class AEFMSampler:
                     metrics["rmsd_initial"] = f"{rmsd_init:.3f}"
                     metrics["rmsd_improvement"] = f"{(rmsd_init - rmsd)/rmsd_init*100:.2f}"
                     trajectory_atoms[0][0].info["rxn"] = rxn
-                    final_sample.info["rxn"] = rxn
+                    
                 
                 pbar.set_postfix(metrics, refresh=False)
 
@@ -157,13 +168,27 @@ class AEFMSampler:
                     final_sample,
                     append=True,
                 )
-            
+        
+        stats_dict = {
+            "n_iterations": n_iterations,
+            "times": times,
+        }
+        
+        log.info(
+            "Number of iterations per sample:\n " +
+            f"Mean: {np.mean(n_iterations):.0f} \n " +
+            f"Median: {np.median(n_iterations):.0f}"
+        )
+        
+        log.info(
+            "Time per sample (s):\n "+
+            f"Mean: {np.mean(times):.0f} \n " +
+            f"Median: {np.median(times):.0f}"
+        )
+        
         if len(rmsd_initial) > 0:
-            log.info(
-                "Number of iterations per sample:\n " +
-                f"Mean: {np.mean(n_iterations):.0f} \n " +
-                f"Median: {np.median(n_iterations):.0f}"
-            )
+            stats_dict["rmsd_initial"] = rmsd_initial
+            stats_dict["rmsd_final"] = rmsd_final
             log.info(
                 f"Initial RMSD:\n Mean: {np.mean(rmsd_initial):.3f} \n " +
                 f"Median: {np.median(rmsd_initial):.3f}"
@@ -173,11 +198,9 @@ class AEFMSampler:
                 f"Median: {np.median(rmsd_final):.3f}"
             )
             
-            np.savez( 
-                os.path.join(self.store_path, "stats.npz"),
-                rmsd_initial=rmsd_initial,
-                rmsd_final=rmsd_final,
-                n_iterations=n_iterations
-            )
+        np.savez( 
+            os.path.join(self.store_path, "stats.npz"),
+            **stats_dict
+        )
 
             

@@ -112,8 +112,22 @@ class SubtractCenterOfGeometry(trn.Transform):
             inputs[properties.position] = batch_center_systems(
                 inputs[properties.position], inputs[properties.conditions_idx_m]
             )
+            
+            if properties.x_0 in inputs:
+                inputs[properties.x_0] = batch_center_systems(
+                    inputs[properties.x_0], inputs[properties.conditions_idx_m]
+                )
+                inputs[properties.x_1] = batch_center_systems(
+                    inputs[properties.x_1], inputs[properties.conditions_idx_m]
+                )
         else:
             inputs[properties.position] -= inputs[properties.position].mean(0)
+
+            if properties.x_0 in inputs:
+                inputs[properties.x_0] -= inputs[properties.x_0].mean(0)
+            if properties.x_1 in inputs:
+                inputs[properties.x_1] -= inputs[properties.x_1].mean(0)
+                
         return inputs
 
 

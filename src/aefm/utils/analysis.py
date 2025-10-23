@@ -97,6 +97,9 @@ def _rotation_matrix_from_points(m0, m1):
 def _ase_align(p: torch.Tensor, p0: torch.Tensor):
     """align p to p0 using the Kabsch algorithm."""
 
+    p = p.clone()
+    p0 = p0.clone()
+    
     # centeroids to origin
     c = torch.mean(p, dim=0)
     p -= c

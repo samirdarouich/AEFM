@@ -193,7 +193,12 @@ class OTCFM(GaussianCFM):
         return x_1 - x_0
 
 
-class CondOTCFM(OTCFM):
+class VFM(OTCFM):
+    """
+    Following the variational Flow matching scheme (VFM) proposed by Eijkelboom et al.
+    (https://arxiv.org/abs/2406.04843) learning the end point of the flow trajectory.
+    """
+    
     def compute_conditional_flow(
         self, x_0: torch.Tensor, x_1: torch.Tensor, t: torch.Tensor, x_t: torch.Tensor
     ) -> torch.Tensor:
