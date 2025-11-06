@@ -17,7 +17,7 @@ from .functional import (
 __all__ = [
     "GaussianCFM",
     "OTCFM",
-    "CondOTCFM",
+    "VFM",
     "GaussianDDPM",
     "VPGaussianDDPM",
 ]

@@ -43,7 +43,7 @@ class Sampler:
 
     def _load_model(self, model: Optional[Union[nn.Module, str]]):
         if isinstance(model, str):
-            logger.info(f"Loading model from: '{model}'")
+            logger.info(f"Loading model from: <{model}>")
             try:
                 model = torch.load(
                     model,

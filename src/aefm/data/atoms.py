@@ -42,7 +42,8 @@ class ASEReactionData(ASEAtomsData):
             load_structure: If True, load structure properties.
             transforms: preprocessing torch.nn.Module (see schnetpack.data.transforms)
             reaction_transforms: List of transformations to apply to the reactions.
-            subset_idx: List of data indices.
+            subset_idx: List of reaction indices. These are used to define the subset of
+                data with the same reaction index.
             property_units: unit string dictionary that overwrites the native units of
                 the dataset. Units are converted automatically during loading.
             distance_unit: Unit of distance. If None, the unit is read from the ASE db.
@@ -133,7 +134,8 @@ class ASEReactionData(ASEAtomsData):
     def __getitem__(self, idx: int) -> List[Dict[str, torch.Tensor]]:
         if self.subset_idx is not None:
             idx = self.subset_idx[idx]
-
+        
+        # idx is a reaction index
         reaction_indices = self._reaction_indices[idx]
 
         # Get the reaction images
@@ -187,10 +189,9 @@ class ASEReactionData(ASEAtomsData):
 
     @property
     def unique_reactions_ids(self) -> List[int]:
-        reaction_indices = list(self._reaction_indices.keys())
         if self.subset_idx is not None:
-            return [reaction_indices[i] for i in self.subset_idx]
-        return reaction_indices
+            return self.subset_idx
+        return list(self._reaction_indices.keys())
 
     @property
     def n_images(self) -> int:

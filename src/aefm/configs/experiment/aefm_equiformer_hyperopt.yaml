@@ -1,6 +1,6 @@
 # @package _global_
 defaults:
-  - aefm
+  - aefm_equiformer
   - override /callbacks:
       - checkpoint
       - lrmonitor
@@ -11,15 +11,22 @@ defaults:
 hyperopt: True
 
 run:
-  id: aefm_hyper
+  id: aefm_hyper_equiformer
 
 trainer:
   max_epochs: 2000
 
 globals:
+  # Parameters changed in hyperoptimization
+  lr: 1.0e-4
+  weight_decay: 1.0e-3
   bond_loss_cutoff: 2.0
   bond_loss_weight: 0.5
   sigma_fm: 0.05
+  num_layers: 12
+  n_atom_basis: 128
+  ffn_hidden_channels: 512
+  lmax: 6
 
   # Flow process to define x_t and target v_t
   flow_process:
@@ -27,6 +34,23 @@ globals:
     sigma: ${globals.sigma_fm}
     invariant: True 
     dtype: float64
+
+# This defines the backbone model.
+model:
+  input_modules:
+    - _target_: aefm.transform.Convert2PyG # Converts schnet inputs to PyG data
+  
+  representation:
+    _target_: aefm.representation.equiformer_v2.equiformer_v2_denoising.EquiformerV2S_OC20_DenoisingPos
+    output_key: ${globals.target_output_key}
+    max_radius: ${globals.cutoff}
+    num_layers: ${globals.num_layers}
+    sphere_channels: ${globals.n_atom_basis}
+    num_sphere_samples: ${globals.n_atom_basis}
+    edge_channels: ${globals.n_atom_basis}
+    ffn_hidden_channels: ${globals.ffn_hidden_channels}
+    lmax_list: ["${globals.lmax}"]
+    mmax_list: [2]
 
 callbacks:
   early_stopping:
@@ -68,3 +92,7 @@ task:
         mse_bond:
           _target_: torchmetrics.regression.MeanSquaredError
       loss_weight: ${globals.bond_loss_weight}
+
+  # Regularization
+  optimizer_args:
+    weight_decay: ${globals.weight_decay}

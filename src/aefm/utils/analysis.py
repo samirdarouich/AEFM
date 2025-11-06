@@ -23,6 +23,7 @@ from pyscf.geomopt.geometric_solver import optimize
 from pyscf.hessian import thermo
 import os
 from functools import partial
+
 log = logging.getLogger(__name__)
 
 
@@ -190,7 +191,7 @@ def pymatgen_align(
         assert np.all(sample.get_atomic_numbers() == target.get_atomic_numbers()), (
             "Expected sample and target to have the same atom ordering."
         )
-        print("Use Kabsch Matcher matching.")
+        log.debug("Use Kabsch Matcher matching.")
         bfm = KabschMatcher(target_pymatgen)
         aligned_sample, _ = bfm.fit(sample_pymatgen)
     else:
@@ -199,18 +200,18 @@ def pymatgen_align(
         )
 
         if total_permutations < max_permutations:
-            print("Use brute force matching.")
+            log.debug("Use brute force order matching.")
             bfm = BruteForceOrderMatcher(target_pymatgen)
             aligned_sample, _ = bfm.fit(sample_pymatgen)
         else:
             bfm = GeneticOrderMatcher(target_pymatgen, threshold=0.5)
             pairs = bfm.fit(sample_pymatgen)
             if len(pairs) == 0:
-                print("Use hungarian order matching.")
+                log.debug("Use hungarian order matching.")
                 bfm = HungarianOrderMatcher(target_pymatgen)
                 aligned_sample, _ = bfm.fit(sample_pymatgen)
             else:
-                print("Use genetic order matching.")
+                log.debug("Use genetic order matching.")
                 min_idx = np.argmin([p[1] for p in pairs])
                 aligned_sample = [p[0] for p in pairs][min_idx]
     

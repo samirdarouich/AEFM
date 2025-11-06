@@ -80,6 +80,8 @@ data:
   # Define how to handle reaction input. Group by reaction groups reactant,
   # neb_intermediates, TS, and product. Such that the reaction transform
   # can be applied. If MLIP should be trained, there is no need to group it.
+  # The split file specifies these reaction ids.
+  reaction_id_key: reaction_ids 
   group_by_reaction: True
   include_final_intermediates: False
 

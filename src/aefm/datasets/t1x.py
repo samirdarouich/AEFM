@@ -88,7 +88,7 @@ class Transition1x(AtomsDataModule):
             self._val_dataset = self.dataset.subset(self.val_idx)
             self._test_dataset = self.dataset.subset(self.test_idx)
 
-            log.info(f"Loaded {len(self.dataset)} samples from {datapath}.")
+            log.info(f"Loaded {len(self.dataset)} reactions from <{datapath}>.")
             log.info(f"Train dataset size: {len(self._train_dataset)}")
             log.info(f"Validation dataset size: {len(self._val_dataset)}")
             log.info(f"Test dataset size: {len(self._test_dataset)}")

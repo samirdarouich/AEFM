@@ -22,7 +22,14 @@ import time
 log = logging.getLogger(__name__)
 
 class AEFMSampler:
-    def __init__(self, sampler: Sampler, store_path: str, converter: Optional[AtomsConverter]=None, reference_path: Optional[str]=None, save_trajectory: bool=True):
+    def __init__(self, 
+                 sampler: Sampler,
+                 store_path: str, 
+                 converter: Optional[AtomsConverter]=None, 
+                 reference_path: Optional[str]=None, 
+                 save_trajectory: bool=True, 
+                 identifier: List[str]=None
+        ):
         """
             Initializes the sampler with the given model, sampler, storage path, and
             device.
@@ -40,6 +47,14 @@ class AEFMSampler:
         self.sampler = sampler
         self.store_path = store_path
         self.reference = {atoms.info["rxn"]: atoms for atoms in ase.io.read(reference_path, index=":")} if reference_path is not None else None
+        self.identifier = identifier if identifier is not None else ["rxn"]
+        self.reference = None
+        if reference_path is not None:
+            print(f"Reading reference database from <{reference_path}>...")
+            self.reference = {}
+            for atoms in ase.io.read(reference_path, index=":"):
+                atom_identifier = self.get_atom_identifier(atoms)
+                self.reference[atom_identifier] = atoms
         
         if converter is not None:
             self.converter = converter
@@ -55,14 +70,20 @@ class AEFMSampler:
                 device=sampler.device,
             )
         self.converter.device = sampler.device
-        self.offset = 0
         self.save_trajectory = save_trajectory
         log.info(f"Using device: {self.sampler.device}")
+        log.info(f"Storing samples at: <{self.store_path}> using identifier: {self.identifier}")
         log.info(
             f"Using {self.sampler.fixpoint_algorithm} with following settings:\n"+
             "\n".join(f"   {k}: {v}" for k, v in self.sampler.fixpoint_settings.items())
         )
 
+    def get_atom_identifier(self, sample: Atoms, rxn: int=None) -> str:
+        """Get a unique identifier for the sample based on the specified keys."""
+        if self.identifier == ["rxn"]:
+            return str(sample.info.get("rxn", rxn))
+        return "_".join([key + "_" + str(sample.info[key]) for key in self.identifier])
+    
     def save_samples(
         self,
         samples: List[Atoms],
@@ -84,14 +105,12 @@ class AEFMSampler:
 
         for sample in samples:
             # Create for each sample an own folder
-            rxn = sample[0].info.get("rxn", self.offset)
-            sample_path = os.path.join(store_path, f"reaction_{rxn}")
-            os.makedirs(sample_path, exist_ok=True)
-
+            atom_identifier = sample[-1].info["atom_identifier"]
+                
             # Save trajectory
+            sample_path = os.path.join(store_path, atom_identifier)
+            os.makedirs(sample_path, exist_ok=True)
             write(os.path.join(sample_path, "trajectory.xyz"), sample)
-            
-            self.offset += 1
 
     def sample(self, samples: List[ase.Atoms]):
         
@@ -109,12 +128,12 @@ class AEFMSampler:
             os.remove(db_path)
         
         with tqdm(samples, desc="Processing", unit="sample") as pbar:
-            for sample in pbar:
-                rxn = sample.info.get("rxn", None)
-                if self.reference and rxn in self.reference:
-                    ref_atoms = self.reference[rxn]
+            for i, sample in enumerate(pbar):
+                atom_identifier = self.get_atom_identifier(sample, i)
+                if self.reference and atom_identifier in self.reference:
+                    ref_atoms = self.reference[atom_identifier]
                     if len(ref_atoms) != len(sample):
-                        raise ValueError(f"Reference and sample have different number of atoms for reaction {rxn}.")
+                        raise ValueError(f"Reference and sample have different number of atoms for reaction {atom_identifier}.")
                     _, rmsd_init = get_rmsd(sample=sample, reference=ref_atoms, same_order=True)
                     rmsd_initial.append(rmsd_init)
                     
@@ -138,23 +157,22 @@ class AEFMSampler:
                 final_sample = trajectory_atoms[0][-1]
                 final_sample.info.update(sample.info)
                 final_sample.info.pop("rmsd", None) # remove previous rmsd if exists
-                final_sample.info["type"] = "aefm_sample"
+                final_sample.info.pop("delta_e", None) # remove previous delta_e if exists
+                final_sample.info["sampler"] = "AEFM"
                 final_sample.info["n_steps"] = nfe
                 final_sample.info["sampling_time"] = round(sampling_time,2)
-                final_sample.info["rxn"] = rxn
-                metrics = {"n_steps": f"{nfe:.0f}"}
-                if self.reference and rxn in self.reference:
+                final_sample.info["atom_identifier"] = atom_identifier
+                metrics = {"n_steps": f"{nfe:.0f}", "time": f"{sampling_time:.2f}"}
+                if self.reference and atom_identifier in self.reference:
                     try:
                         final_sample, rmsd = get_rmsd(sample=final_sample, reference=ref_atoms, same_order=True)
                     except:
                         rmsd = float("nan")
-                        log.warning(f"Could not align sample to reference for reaction {rxn}.")
+                        log.warning(f"Could not align sample to reference for reaction {atom_identifier}.")
                     rmsd_final.append(rmsd)
                     metrics["rmsd_final"] = f"{rmsd:.3f}"
                     metrics["rmsd_initial"] = f"{rmsd_init:.3f}"
                     metrics["rmsd_improvement"] = f"{(rmsd_init - rmsd)/rmsd_init*100:.2f}"
-                    trajectory_atoms[0][0].info["rxn"] = rxn
-                    
                 
                 pbar.set_postfix(metrics, refresh=False)
 
@@ -182,8 +200,8 @@ class AEFMSampler:
         
         log.info(
             "Time per sample (s):\n "+
-            f"Mean: {np.mean(times):.0f} \n " +
-            f"Median: {np.median(times):.0f}"
+            f"Mean: {np.mean(times):.2f} \n " +
+            f"Median: {np.median(times):.2f}"
         )
         
         if len(rmsd_initial) > 0:

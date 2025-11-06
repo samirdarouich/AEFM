@@ -195,21 +195,25 @@ def train(config: DictConfig):
     # Train the model
     log.info("Starting training.")
     trainer.fit(model=task, datamodule=datamodule, ckpt_path=config.run.ckpt_path)
-
-    # Evaluate model on test set after training
-    log.info("Starting testing.")
-    trainer.test(model=task, datamodule=datamodule, ckpt_path="best")
-
+    
     # Store best model
+    log.info("Training completed.")
     best_path = trainer.checkpoint_callback.best_model_path  # type: ignore
-    log.info(f"Best checkpoint path:\n{best_path}")
+    best_score = trainer.checkpoint_callback.best_model_score  # type: ignore
+    log.info(f"Best validation score: {best_score.item():.6f}")
+    log.info(f"Best checkpoint path:\n<{best_path}>")
 
     log.info("Store best model")
     best_task = type(task).load_from_checkpoint(best_path)
     torch.save(best_task, config.globals.model_path + ".task")
 
     best_task.save_model(config.globals.model_path, do_postprocessing=True)
-    log.info(f"Best model stored at {os.path.abspath(config.globals.model_path)}")
+    log.info(f"Best model stored at <{os.path.abspath(config.globals.model_path)}>")
+    
+    if not config.get("hyperopt", False):
+        # Evaluate model on test set after training
+        log.info("Starting testing.")
+        trainer.test(model=task, datamodule=datamodule, ckpt_path="best")
 
 fields = (
     "run",

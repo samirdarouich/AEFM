@@ -125,11 +125,7 @@ ONLY_RTSP = True
 
 dataloader = Dataloader("Transition1x.h5", datasplit="data", only_final=ONLY_RTSP)
 
-properties = []
 atoms_list = []
-reaction_ids = []
-type_list = []
-formula_list = []
 
 for configuration in dataloader:
     rxn = int(configuration["rxn"][3:])
@@ -174,66 +170,15 @@ for configuration in dataloader:
     else:
         path = [reactant, transition_state, product]
     
-    properties.extend(
-        {"energy": np.array([p.get_potential_energy()]), "forces": p.get_forces()}
-        for p in path
-    )
     atoms_list.extend(path)
-    type_list.extend([p.info["type"] for p in path])
-    reaction_ids.extend([int(p.info["rxn"][3:]) for p in path])
-    formula_list.extend([configuration["reactant"]["formula"] for _ in path])
 
 # Sort after reaction index
-sorting_idx = sorted(range(len(reaction_ids)), key=lambda x: reaction_ids[x])
-properties_sorted = [properties[i] for i in sorting_idx]
-atoms_list_sorted = [atoms_list[i] for i in sorting_idx]
-type_list_sorted = [type_list[i] for i in sorting_idx]
-reaction_ids_sorted = [reaction_ids[i] for i in sorting_idx]
-formula_list_sorted = [formula_list[i] for i in sorting_idx]
+atoms_list_sorted = sorted(atoms_list, key=lambda x: x.info["rxn"])
 
-### Write full dataset to ASE database and extxyz files ###
-# Write to ASE db
-db_file = "t1x.db"
-dataset = ASEAtomsData.create(
-    db_file,
-    distance_unit="Ang",
-    property_unit_dict={"energy": "eV", "forces": "eV/Ang"},
-)
-dataset.add_systems(property_list=properties_sorted, atoms_list=atoms_list_sorted)
-dataset.update_metadata(
-    groups_ids={
-        "reaction_ids": reaction_ids_sorted,
-        "reaction_ids_unique": reaction_ids_sorted,
-        "image_type": type_list_sorted,
-        "formula": formula_list_sorted,
-    }
-)
-
-# Write to extxyz
+# Write all data to extxyz
 write("t1x.xyz", atoms_list_sorted)
 
-### Write only TS to ASE databse and extxyz ###
-ts_ids = [i for i, t in enumerate(type_list_sorted) if t == "transition_state"]
-
-db_file = "t1x_ts.db"
-dataset = ASEAtomsData.create(
-    db_file,
-    distance_unit="Ang",
-    property_unit_dict={"energy": "eV", "forces": "eV/Ang"},
-)
-dataset.add_systems(
-    property_list=[properties_sorted[i] for i in ts_ids], 
-    atoms_list=[atoms_list_sorted[i] for i in ts_ids]
-)
-dataset.update_metadata(
-    groups_ids={
-        "reaction_ids": [reaction_ids_sorted[i] for i in ts_ids],
-        "reaction_ids_unique": [reaction_ids_sorted[i] for i in ts_ids],
-        "image_type": [type_list_sorted[i] for i in ts_ids],
-        "formula": [formula_list_sorted[i] for i in ts_ids],
-    }
-)
-
-ts_atoms = [atoms_list_sorted[i] for i in ts_ids]
+# Write only TS to extxyz
+ts_atoms = [a for a in atoms_list_sorted if a.info["type"] == "transition_state"]
 write("t1x_ts.xyz", ts_atoms)
 

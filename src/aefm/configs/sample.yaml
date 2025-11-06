@@ -44,6 +44,8 @@ aefmsampler:
       - _target_: schnetpack.transform.CastTo32
   store_path: aefm_samples
   reference_path: ${globals.reference_path}
+  # list of atom keys to identify reactions.
+  identifier: [rxn]
 
 
 # hydra configuration

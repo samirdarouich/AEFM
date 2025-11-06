@@ -18,7 +18,6 @@ trainer:
 # This defines the backbone model.
 model:
   # Input modules could be computation of distances
-  # LEFTNet does this itself.
   input_modules:
     - _target_: aefm.transform.Convert2PyG # Converts schnet inputs to PyG data
   
@@ -80,7 +79,7 @@ task:
       metrics:
         mse:
           _target_: torchmetrics.regression.MeanSquaredError
-      loss_weight: 1.5
+      loss_weight: 1.0
     
     # Computes the physical bond loss to avoid artefacts in generative models
     - _target_: aefm.task.BondModelOutput
@@ -92,7 +91,7 @@ task:
       metrics:
         mse_bond:
           _target_: torchmetrics.regression.MeanSquaredError
-      loss_weight: 0.5
+      loss_weight: 1.0
   
   # Regularization
   optimizer_args:

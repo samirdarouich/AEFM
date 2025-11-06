@@ -5,6 +5,7 @@ import numpy as np
 from ase.io import read
 from schnetpack.data import ASEAtomsData
 from tqdm import tqdm
+from aefm.utils import pymatgen_align
 
 parser = argparse.ArgumentParser(description="Convert extended XYZ to an ASE database.")
 parser.add_argument(
@@ -38,6 +39,16 @@ output_path = args.output_path
 labeled_dataset = args.labeled_dataset
 meta_keys = args.meta_keys
 
+txt = f"""
+Converting extended XYZ data at '{data_path}' to ASE database at '{output_path}'.
+Expecting R, TS, P for each reaction in this order. 
+Aligns product to reactant and removes center of positions (COP).
+"""
+print(txt)
+
+if labeled_dataset:
+    print("Extracting energies and forces.")
+    
 if meta_keys:
     print(f"Extracting metadata keys: {meta_keys}")
 
@@ -77,10 +88,6 @@ for i in tqdm(range(len(reactants)), desc="Processing reactions"):
 
     path = [reactant, transition_state, product]
 
-    # Remove COP
-    for p in path:
-        p.positions = p.positions - p.positions.mean(axis=0)
-
     if labeled_dataset:
         properties.extend(
             {"energy": np.array([p.get_potential_energy()]), "forces": p.get_forces()}
@@ -88,6 +95,13 @@ for i in tqdm(range(len(reactants)), desc="Processing reactions"):
         )
     else:
         properties.extend({} for p in path)
+    
+    # Remove COP
+    for p in path:
+        p.positions = p.positions - p.positions.mean(axis=0)
+
+    # Align reactant and product
+    path[2] = pymatgen_align(path[2], path[1], same_order=True)
 
     atoms_list.extend(path)
     type_list.extend([p.info["type"] for p in path])
@@ -98,16 +112,16 @@ for i in tqdm(range(len(reactants)), desc="Processing reactions"):
     for key in meta_keys:
         for p in path:
             if key in p.info:
-                meta_data[key].append(p.info[key])
+                meta_data[key].append(str(p.info[key]))
             elif hasattr(p, key):
-                meta_data[key].append(getattr(p, key))
+                meta_data[key].append(str(getattr(p, key)))
             else:
                 raise KeyError(
                     f"Metadata key '{key}' not found in atoms.info or as Atoms attribute."
                 )
 
 # Sort after reaction index
-sorting_idx = sorted(range(len(reaction_ids)), key=lambda x: reaction_ids[x])
+sorting_idx = np.argsort(reaction_ids, stable=True)
 properties_sorted = [properties[i] for i in sorting_idx]
 atoms_list_sorted = [atoms_list[i] for i in sorting_idx]
 type_list_sorted = [type_list[i] for i in sorting_idx]
