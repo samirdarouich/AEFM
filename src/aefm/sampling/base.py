@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -44,6 +45,8 @@ class Sampler:
     def _load_model(self, model: Optional[Union[nn.Module, str]]):
         if isinstance(model, str):
             logger.info(f"Loading model from: <{model}>")
+            if not os.path.exists(model):
+                raise ValueError(f"Model path <{model}> does not exist.")
             try:
                 model = torch.load(
                     model,

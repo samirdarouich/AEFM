@@ -245,6 +245,8 @@ def sample(config: DictConfig):
 
     # Load samples
     log.info(f"Loading samples from <{config.globals.samples_path}>")
+    if not os.path.exists(config.globals.samples_path):
+        raise ValueError(f"Samples path <{config.globals.samples_path}> does not exist.")
     samples = ase.io.read(config.globals.samples_path, index=":")
     log.info(f"Loaded {len(samples)} samples.")
 

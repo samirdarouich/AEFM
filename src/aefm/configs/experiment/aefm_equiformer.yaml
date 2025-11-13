@@ -61,7 +61,8 @@ data:
 
     - _target_: schnetpack.transform.CastTo64
     - _target_: aefm.transform.SubtractCenterOfGeometry
-    - _target_: aefm.transform.AllToAllNeighborList
+    - _target_: schnetpack.transform.ASENeighborList
+      cutoff: ${globals.cutoff}
     - _target_: aefm.transform.ComputeDistances
       name: ${globals.target_positions_key}
     - _target_: schnetpack.transform.CastTo32

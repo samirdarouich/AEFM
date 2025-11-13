@@ -40,6 +40,13 @@ def create_run_name(experiment: str, trial_id: int, hyperparams: dict) -> str:
     # wandb restricts the name to be shorter than 128 characters
     return (f"hyperopt_{experiment}_trial_{trial_id}_" + "_".join(parts))[:128]
 
+def detect_problem_in_setup(result: subprocess.CompletedProcess) -> bool:
+    # Check for common issues in the subprocess result
+    no_output = not result.stdout
+    error_except_oom = any("Error" in line for line in result.stderr.split("\n")[-5:] if not 'CUDA out of memory' in line)
+    if no_output or error_except_oom:
+        return True
+    return False
 
 def objective(trial, experiment: str, max_epochs: int=50, model: str="LEFTNet", data_workdir: str=None, num_workers: int=8) -> float:
 
@@ -96,8 +103,8 @@ def objective(trial, experiment: str, max_epochs: int=50, model: str="LEFTNet", 
     cmd.extend([f"{key}={value}" for key, value in hyperparams.items()])
 
     result = subprocess.run(cmd, capture_output=True, text=True)
-    
-    if not result.stdout or any("Error" in line for line in result.stderr.split("\n")[-5:]):
+
+    if detect_problem_in_setup(result):
         log.warning(f"Something went wrong! Check the setup: {result.stderr}")
         log.warning("Exiting optimization.")
         sys.exit(1)

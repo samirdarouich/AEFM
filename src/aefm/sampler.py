@@ -50,7 +50,9 @@ class AEFMSampler:
         self.identifier = identifier if identifier is not None else ["rxn"]
         self.reference = None
         if reference_path is not None:
-            print(f"Reading reference database from <{reference_path}>...")
+            if not os.path.exists(reference_path):
+                raise ValueError(f"Reference path <{reference_path}> does not exist.")
+            log.info(f"Reading reference database from <{reference_path}>...")
             self.reference = {}
             for atoms in ase.io.read(reference_path, index=":"):
                 atom_identifier = self.get_atom_identifier(atoms)
@@ -80,8 +82,6 @@ class AEFMSampler:
 
     def get_atom_identifier(self, sample: Atoms, rxn: int=None) -> str:
         """Get a unique identifier for the sample based on the specified keys."""
-        if self.identifier == ["rxn"]:
-            return str(sample.info.get("rxn", rxn))
         return "_".join([key + "_" + str(sample.info[key]) for key in self.identifier])
     
     def save_samples(
