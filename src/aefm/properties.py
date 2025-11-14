@@ -11,6 +11,7 @@ IMAGE_TYPES: Dict[str, int] = {
     "intermediate_normal_mode": 5,
     "intermediate_noise": 6,
     "transition_state_prior": 7,
+    "gaussian_prior": 8,
 }
 IMAGE_TYPES_REVERSE: Dict[int, str] = {v: k for k, v in IMAGE_TYPES.items()}
 
