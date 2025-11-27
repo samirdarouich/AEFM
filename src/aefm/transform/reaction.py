@@ -16,6 +16,7 @@ from aefm.utils.analysis import _ase_align, inputs_to_atoms
 __all__ = [
     "ReactionTransform",
     "GenerativeStrategy",
+    "GaussianPrior",
     "AdaptivePrior",
     "FlowTSinitTS",
     "DiffusionTS",
@@ -307,6 +308,54 @@ class GenerativeStrategy(ReactionTransform):
         return np.divmod(choices, pi.shape[1])
 
 
+class GaussianPrior(GenerativeStrategy):
+    """ 
+    Gaussian prior. This will prepare the source to be Gaussian noise.
+    """
+        
+    def forward(
+        self, inputs: List[Dict[str, torch.Tensor]]
+    ) -> List[Dict[str, torch.Tensor]]:
+        # Group inputs by image type
+        reactant, product, transition_state, *_ = _analyze_inputs(inputs)
+
+        assert transition_state is not None, "Transition state must be provided."
+
+        # Define x_0 and x_1 for flow
+        x_1 = transition_state[self.target_property]
+        x_0 = sample_noise_like(x_1, invariant=True, idx_m=None)
+        
+        # If wanted add noise to x_1 (can improve stability)
+        x_1 = self._add_noise(x_1, self.sigma_x_1)
+
+        # align x_0 to x_1 (if wanted, can be helpful when sigma is large)
+        if self.align:
+            x_0 = _ase_align(x_0, x_1)
+            
+        output = {
+            properties.x_0: x_0,
+            properties.x_1: x_1,
+            f"target_{self.target_property}": transition_state[self.target_property],
+            **transition_state,
+        }
+        output[self.target_property] = output[properties.x_0]
+
+        # starting point is intermedate
+        output[properties.image_type] = torch.tensor(
+            [properties.IMAGE_TYPES["gaussian_prior"]]
+        )
+        
+        if self.conditioned:
+            # If conditions are present add to input
+            output = self._add_conditions(output, [reactant, product])
+        
+        rmsd = ((x_1-x_0)**2).sum(-1).mean().sqrt()
+        output[properties.rmsd+"_initial"] = rmsd.unsqueeze(0)
+        outputs = [output]
+
+        return outputs
+        
+        
 class AdaptivePrior(GenerativeStrategy):
     """ 
     Adaptive prior for AEFM. This will prepare the source to be a noised version
