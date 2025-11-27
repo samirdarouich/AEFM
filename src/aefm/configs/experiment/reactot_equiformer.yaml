@@ -1,0 +1,10 @@
+# @package _global_
+
+defaults:
+  - aefm_equiformer
+
+run:
+  id: reactot_equiformer
+
+globals:
+  sigma: 0.11

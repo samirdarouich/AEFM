@@ -1,0 +1,10 @@
+# @package _global_
+
+defaults:
+  - aefm_equiformer
+
+run:
+  id: xtb_ci_neb_equiformer
+
+globals:
+  sigma: 0.19

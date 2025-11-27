@@ -101,6 +101,6 @@ task:
 callbacks:
   # if early stopping is needed
   early_stopping:
-    patience: 150
+    patience: 50
   ema:
     decay: 0.999

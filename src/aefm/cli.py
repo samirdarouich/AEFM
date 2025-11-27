@@ -35,19 +35,6 @@ log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("uuid", lambda x: str(uuid.uuid1()))
 OmegaConf.register_new_resolver("tmpdir", tempfile.mkdtemp, use_cache=True)
 
-fields = (
-    "run",
-    "globals",
-    "data",
-    "model",
-    "task",
-    "trainer",
-    "callbacks",
-    "logger",
-    "seed",
-    "sampler",
-)
-
 header = """
 ░▒▓███████▓▒░ ▒▓███████▓▒░ ▒▓███████▓▒░ ░▒▓██████████████▓▒░ 
 ░▒▓█▓▒  ▒▓█▓▒ ▒▓█▓▒░       ▒▓█▓▒░       ░▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒ 
@@ -86,6 +73,18 @@ def train(config: DictConfig):
     check_existing_config(config, "config_train", train=True)
 
     if config.get("print_config", True):
+        fields = (
+            "run",
+            "globals",
+            "data",
+            "model",
+            "task",
+            "trainer",
+            "callbacks",
+            "logger",
+            "seed",
+            "sampler",
+        )
         print_config(config, fields=fields, resolve=False)
 
     if "matmul_precision" in config and config.matmul_precision is not None:
@@ -129,7 +128,7 @@ def train(config: DictConfig):
     if "pretrained" in config:
         if config.pretrained is not None:
             log.info(f"\n\nLoading pretrained model from <{config.pretrained}>\n\n")
-            pretrained = torch.load(config.pretrained, "cpu")
+            pretrained = torch.load(config.pretrained, "cpu", weights_only=False)
 
             if isinstance(pretrained, torch.nn.Module):
                 state_dict = pretrained.state_dict()
@@ -215,11 +214,6 @@ def train(config: DictConfig):
         log.info("Starting testing.")
         trainer.test(model=task, datamodule=datamodule, ckpt_path="best")
 
-fields = (
-    "run",
-    "globals",
-    "aefmsampler",
-)
 
 @hydra.main(config_path="configs", config_name="sample", version_base="1.2")
 def sample(config: DictConfig):
@@ -237,6 +231,11 @@ def sample(config: DictConfig):
         return
 
     if config.get("print_config", True):
+        fields = (
+            "run",
+            "globals",
+            "aefmsampler",
+        )
         print_config(config, fields=fields, resolve=False)
 
     # Init sampler

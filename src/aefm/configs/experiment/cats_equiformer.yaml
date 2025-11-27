@@ -1,0 +1,24 @@
+# @package _global_
+
+defaults:
+  - aefm_equiformer
+
+# Path to pretrained model on Transition1x
+pretrained: ???
+
+run:
+  id: cats_equiformer
+
+globals:
+  sigma: 0.17
+
+data:
+  # Train on CaTS DFT dataset leaving 10% of training for validation
+  split_file: ${run.data_dir}/splits/split_dft_with_val.npz 
+  datapath: ${run.data_dir}/cats_dft.db
+
+  batch_size: 2
+
+  num_train: 295
+  num_val: 32
+  num_test: 75

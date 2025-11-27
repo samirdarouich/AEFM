@@ -1,0 +1,22 @@
+# @package _global_
+
+defaults:
+  - aefm_equiformer
+
+run:
+  id: birkholz_equiformer
+
+globals:
+  sigma: 0.31
+
+data:
+# Define how to handle the reaction input
+  reaction_transforms:
+    - _target_: aefm.transform.reaction.AdaptivePrior
+      target_property: ${globals.flow_property}
+      # Define adaptive prior sigma
+      sigma: ${globals.sigma}
+      # If large sigma is used, it can help to align the input
+      align: True 
+      # Stability parameter for target
+      sigma_x_1: ${globals.sigma_x_1}
